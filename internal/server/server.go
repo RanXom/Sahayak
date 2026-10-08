@@ -5,6 +5,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -158,7 +159,11 @@ func (s *Server) initModules() {
 
 	audioStore, err := conversation.NewFileAudioStore(s.cfg.DataDir + "/audio")
 	if err != nil {
-		s.logger.Error("audio_store_init_failed", "error", err)
+		s.logger.Error("audio_store_init_failed", "error", err, "fallback", os.TempDir())
+		audioStore, err = conversation.NewFileAudioStore(os.TempDir() + "/sahayak-audio")
+		if err != nil {
+			s.logger.Error("audio_store_fallback_failed", "error", err)
+		}
 	}
 	s.audioStore = audioStore
 	stt, tts := s.voiceProviders()
@@ -179,6 +184,7 @@ func (s *Server) initModules() {
 	pdfGen, err := application.NewPDFGenerator(s.cfg.PDFDir, s.cfg.FontDir)
 	if err != nil {
 		s.logger.Error("pdf_generator_init_failed", "error", err)
+		pdfGen, _ = application.NewPDFGenerator(os.TempDir()+"/sahayak-pdfs", s.cfg.FontDir)
 	}
 	appRepo := application.NewRepository(s.pool)
 	appSvc := application.NewService(appRepo, schemeRepo, profileRepo, pdfGen)
