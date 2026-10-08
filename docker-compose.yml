@@ -97,9 +97,10 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-      args:
-        # Absolute API URL baked into the frontend build (split subdomains).
-        VITE_API_URL: https://api.shizain.me/api/v1
+      # NOTE: no args block on purpose. Coolify injects every environment
+      # variable as a Docker build-arg, so VITE_API_URL from the Coolify env
+      # reaches the frontend Dockerfile ARG automatically. Declaring it here
+      # makes Coolify treat it as a managed variable and blocks env saves.
     expose:
       - "3000"
     environment:
