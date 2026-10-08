@@ -88,3 +88,70 @@ Postgres data lives outside the repo (default `~/.local/share/sahayak/pgdata`, o
 `$XDG_DATA_HOME`), because a live socket inside the flake source directory breaks
 `nix develop`.
 
+## Configuration
+
+All configuration is environment-based (see `.env.example`). Key variables:
+
+| Variable | Purpose |
+|----------|---------|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `JWT_SECRET`, `PHONE_HASH_PEPPER` | Required in production |
+| `SERVER_MODE` | `all` (api+worker), `api`, `worker` |
+| `VOICE_PROVIDER`, `SARVAM_API_KEY` | Voice backend |
+| `LLM_PROVIDER`, `GEMINI_API_KEY` / `OPENAI_API_KEY` | LLM backend (failover chain) |
+| `SMS_PROVIDER`, `MSG91_AUTH_KEY` | SMS backend |
+| `WHATSAPP_API_KEY` | Gupshup WhatsApp backend |
+| `DEMO_OTP` | Fixed login code for demos (never set in production) |
+| `ADMIN_PHONE` | Phone promoted to admin during seed |
+
+## Hackathon / demo mode
+
+Set `DEMO_OTP` to any 6-digit code (e.g. `123456`). Then:
+
+- `POST /auth/otp/request` returns the code in `demo_otp` and skips SMS, so judges
+  can log in with no SMS provider. The login screen shows and pre-fills it.
+- Per-phone OTP limits and the anonymous IP rate limits are relaxed, so a shared
+  venue network cannot lock anyone out.
+- `GET /api/v1/config` reports `demo_mode`, `voice_enabled` and `llm_enabled`, and
+  the UI hides the microphone when no voice provider is configured.
+
+The frontend also hides the mic unless a voice key is present, so a text-only demo
+never shows a broken button.
+
+## Provider reliability
+
+`llmProvider` builds a **failover chain**: the configured LLM first, the other
+configured LLM second, then a deterministic non-networked fallback. Voice STT/TTS
+do the same across Sarvam and Bhashini. A single provider outage degrades quality
+instead of breaking a live demo.
+
+For a reliable paid setup at low cost:
+
+- **LLM**: OpenAI-compatible providers work out of the box via `OPENAI_BASE_URL`.
+  Groq (`https://api.groq.com/openai/v1`, model `llama-3.3-70b-versatile`) and
+  OpenAI `gpt-4o-mini` are cheap and fast. Set both `GEMINI_API_KEY` and
+  `OPENAI_API_KEY` to get automatic failover. On Gemini's free tier prefer
+  `gemini-3.5-flash-lite` (RPM 15 / RPD 500) over the standard Flash models
+  (RPD 20).
+- **Voice**: Sarvam models are `saaras:v4` (STT) and `bulbul:v3` (TTS); the TTS
+  speaker must be one valid for `bulbul:v3` (e.g. `priya`). Sarvam requires
+  credits — a demo needs only a few hundred rupees. Bhashini is free but
+  approval-gated. Configure both for failover.
+- **SMS**: only needed for real OTP delivery; `DEMO_OTP` removes that dependency
+  for demos.
+
+LLM-extracted facts are normalized into the controlled vocabulary and anything
+unmappable is dropped (`internal/profile.SanitizeExtractedFacts`), so a model
+returning `"widow"` or `"farming"` still produces correct `widowed`/`farmer`
+facts instead of failing the request.
+
+## Data model highlights
+
+- **Phone numbers** are never stored in plaintext. A SHA-256 HMAC (peppered) is used for
+  lookup; last 4 digits for display; and an AES-256-GCM ciphertext (`phone_encrypted`)
+  is retained solely to dispatch notifications.
+- **Schemes** move through `draft → verified → published → archived`. Only `published`
+  schemes participate in eligibility. Discovered candidates live in `candidate_schemes`
+  and never reach citizens.
+- **Eligibility rules** are `expr` expressions referencing a controlled fact vocabulary.
+  Rules are validated (syntax + known fields) on save.
