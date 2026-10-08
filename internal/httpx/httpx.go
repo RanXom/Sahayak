@@ -2,6 +2,8 @@ package httpx
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -65,6 +67,20 @@ func DecodeJSON(w http.ResponseWriter, r *http.Request, dst any) error {
 	return nil
 }
 
+// DecodeJSONOptional decodes a JSON body, treating an empty body as valid.
+func DecodeJSONOptional(w http.ResponseWriter, r *http.Request, dst any) error {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dst); err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		return domain.InvalidInput("Malformed JSON request body")
+	}
+	return nil
+}
+
 // PageParams extracts page and per_page from the query string with defaults.
 func PageParams(r *http.Request) (page, perPage, offset int) {
 	page = 1
@@ -81,4 +97,10 @@ func PageParams(r *http.Request) (page, perPage, offset int) {
 	}
 	offset = (page - 1) * perPage
 	return page, perPage, offset
+}
+
+// IsNotFound reports whether err is a not-found API error.
+func IsNotFound(err error) bool {
+	var apiErr *domain.APIError
+	return errors.As(err, &apiErr) && apiErr.Code == domain.CodeNotFound
 }
