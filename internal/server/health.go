@@ -28,6 +28,11 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	} else {
 		checks["database"] = "ok"
 	}
+	if s.riverStarted.Load() {
+		checks["river"] = "ok"
+	} else if s.cfg.ServerMode == "worker" || s.cfg.ServerMode == "all" {
+		checks["river"] = "starting"
+	}
 
 	code := http.StatusOK
 	if status != "ok" {
