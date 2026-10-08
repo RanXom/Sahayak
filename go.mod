@@ -4,8 +4,10 @@ go 1.26.1
 
 require (
 	github.com/expr-lang/expr v1.17.8
+	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/joho/godotenv v1.5.1
+	golang.org/x/time v0.16.0
 )
 
 require (
