@@ -15,6 +15,7 @@ import (
 	"github.com/sahayak/sahayak/internal/crypto"
 	"github.com/sahayak/sahayak/internal/location"
 	"github.com/sahayak/sahayak/internal/middleware"
+	"github.com/sahayak/sahayak/internal/profile"
 )
 
 // Version is the application version reported by /healthz.
@@ -34,6 +35,7 @@ type Server struct {
 	authHandler *auth.Handler
 
 	locationHandler *location.Handler
+	profileHandler  *profile.Handler
 
 	// Rate limiters
 	anonLimiter  *middleware.RateLimiter
@@ -93,6 +95,10 @@ func (s *Server) initModules() {
 
 	locationRepo := location.NewRepository(s.pool)
 	s.locationHandler = location.NewHandler(location.NewService(locationRepo))
+
+	profileRepo := profile.NewRepository(s.pool)
+	profileSvc := profile.NewService(profileRepo, locationRepo)
+	s.profileHandler = profile.NewHandler(profileSvc)
 }
 
 func (s *Server) buildRouter() {
@@ -124,6 +130,12 @@ func (s *Server) buildRouter() {
 
 			r.Get("/auth/me", s.authHandler.Me)
 			r.Post("/auth/logout", s.authHandler.Logout)
+
+			r.Get("/profile", s.profileHandler.Get)
+			r.Put("/profile", s.profileHandler.Update)
+			r.Patch("/profile/facts", s.profileHandler.MergeFacts)
+			r.Get("/profile/documents", s.profileHandler.GetDocuments)
+			r.Put("/profile/documents", s.profileHandler.UpdateDocuments)
 		})
 	})
 
