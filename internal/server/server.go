@@ -290,6 +290,7 @@ func (s *Server) buildRouter() {
 			r.Get("/locations/states", s.locationHandler.ListStates)
 			r.Get("/locations/states/{id}/districts", s.locationHandler.ListDistricts)
 			r.Get("/documents/types", s.documentHandler.ListTypes)
+			r.Get("/audio/temp/{id}", s.conversationHandler.TempAudio)
 		})
 
 		// Authenticated routes (citizen, helper, admin)
