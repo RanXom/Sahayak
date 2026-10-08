@@ -2,6 +2,7 @@
 package server
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/sahayak/sahayak/internal/eligibility"
 	"github.com/sahayak/sahayak/internal/location"
 	"github.com/sahayak/sahayak/internal/middleware"
+	"github.com/sahayak/sahayak/internal/notification"
 	"github.com/sahayak/sahayak/internal/profile"
 	"github.com/sahayak/sahayak/internal/scheme"
 	"github.com/sahayak/sahayak/internal/source"
@@ -49,6 +51,8 @@ type Server struct {
 	eligibilityHandler  *eligibility.Handler
 	conversationHandler *conversation.Handler
 	applicationHandler  *application.Handler
+	notificationHandler *notification.Handler
+	notificationSvc     *notification.Service
 	audioStore          *conversation.FileAudioStore
 
 	// Rate limiters
@@ -155,7 +159,32 @@ func (s *Server) initModules() {
 	appRepo := application.NewRepository(s.pool)
 	appSvc := application.NewService(appRepo, schemeRepo, profileRepo, pdfGen)
 	s.applicationHandler = application.NewHandler(appSvc)
+
+	notifRepo := notification.NewRepository(s.pool)
+	s.notificationSvc = notification.NewService(notification.Deps{
+		Repo:     notifRepo,
+		Phones:   authRepo,
+		Cipher:   cipher,
+		WhatsApp: s.whatsappProvider(),
+		SMS:      s.smsProvider(),
+		Audit:    auditLogger,
+	})
+	s.notificationHandler = notification.NewHandler(s.notificationSvc)
+
+	appSvc.SetStatusNotifier(func(ctx context.Context, userID, appID, status string) {
+		_, _ = s.notificationSvc.Notify(ctx, notification.NotifyRequest{
+			UserID:        userID,
+			ApplicationID: &appID,
+			Channel:       notification.ChannelWhatsApp,
+			TemplateKey:   notification.TemplateStatusUpdate,
+			Language:      "hi",
+			Params:        map[string]string{"status": status},
+		})
+	})
 }
+
+// NotificationService exposes the notification service (used by other modules).
+func (s *Server) NotificationService() *notification.Service { return s.notificationSvc }
 
 func (s *Server) buildRouter() {
 	r := chi.NewRouter()
@@ -214,6 +243,10 @@ func (s *Server) buildRouter() {
 			r.Get("/applications/{id}/pdf", s.applicationHandler.DownloadPDF)
 			r.Post("/applications/{id}/submit", s.applicationHandler.Submit)
 			r.Put("/applications/{id}/status", s.applicationHandler.UpdateStatus)
+
+			r.Get("/notifications", s.notificationHandler.List)
+			r.Get("/notifications/preferences", s.notificationHandler.GetPreferences)
+			r.Put("/notifications/preferences", s.notificationHandler.UpdatePreferences)
 		})
 
 		// Admin routes
