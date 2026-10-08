@@ -1,7 +1,8 @@
-.PHONY: help build test test-race lint vet fmt migrate migrate-down seed
+.PHONY: help build test test-race lint vet fmt run migrate migrate-down seed
 
 help:
 	@echo "Sahayak development targets:"
+	@echo "  make run             - run the API server"
 	@echo "  make migrate         - apply database migrations"
 	@echo "  make seed            - seed reference data (states, documents, schemes)"
 	@echo "  make test            - run Go tests"
@@ -25,6 +26,9 @@ test-race:
 
 lint:
 	golangci-lint run
+
+run:
+	go run ./cmd/server
 
 migrate:
 	go run ./cmd/migrate up
