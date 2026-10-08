@@ -142,7 +142,7 @@ func (s *Service) GeneratePDF(ctx context.Context, userID, appID, lang string) (
 	if err != nil {
 		return nil, domain.Internal("Could not load scheme", err)
 	}
-	path, err := s.pdf.Generate(userID, app.ID, sch, app.FormData, lang)
+	path, err := s.pdf.Generate(ctx, userID, app.ID, sch, app.FormData, lang)
 	if err != nil {
 		return nil, domain.Internal("Could not generate PDF", err)
 	}

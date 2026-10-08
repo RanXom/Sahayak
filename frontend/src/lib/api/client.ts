@@ -326,12 +326,17 @@ export const api = {
 	documentTypes: () => request<{ document_types: unknown[] }>('/documents/types'),
 
 	// Applications
-	createApplication: (scheme_id: string) =>
-		request<ApplicationView>('/applications', {
-			method: 'POST',
-			body: JSON.stringify({ scheme_id })
-		}),
-	getApplication: (id: string) => request<ApplicationView>(`/applications/${id}`),
+	createApplication: (scheme_id: string, lang = 'hi') =>
+		request<ApplicationView>(
+			'/applications',
+			{
+				method: 'POST',
+				body: JSON.stringify({ scheme_id })
+			},
+			lang
+		),
+	getApplication: (id: string, lang = 'hi') =>
+		request<ApplicationView>(`/applications/${id}`, {}, lang),
 	listApplications: () =>
 		request<{ applications: Array<{ id: string; scheme_id: string; status: string; has_pdf: boolean }> }>(
 			'/applications'
@@ -341,10 +346,14 @@ export const api = {
 			method: 'PUT',
 			body: JSON.stringify({ form_data })
 		}),
-	generatePdf: (id: string) =>
-		request<{ id: string; status: string; has_pdf: boolean }>(`/applications/${id}/pdf`, {
-			method: 'POST'
-		}),
+	generatePdf: (id: string, lang = 'hi') =>
+		request<{ id: string; status: string; has_pdf: boolean }>(
+			`/applications/${id}/pdf`,
+			{
+				method: 'POST'
+			},
+			lang
+		),
 	recordSubmission: (id: string, submission_ref: string) =>
 		request<unknown>(`/applications/${id}/submit`, {
 			method: 'POST',

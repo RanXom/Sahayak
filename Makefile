@@ -1,4 +1,4 @@
-.PHONY: help build test test-race lint vet fmt run migrate seed seed-admin docker-up docker-down docker-logs frontend-install frontend-dev frontend-build
+.PHONY: help build test test-race lint vet fmt run migrate seed seed-admin fetch-fonts docker-up docker-down docker-logs frontend-install frontend-dev frontend-build
 
 help:
 	@echo "Sahayak development targets:"
@@ -9,6 +9,7 @@ help:
 	@echo "  make test            - run Go tests"
 	@echo "  make test-race       - run Go tests with the race detector"
 	@echo "  make lint            - run golangci-lint (if installed)"
+	@echo "  make fetch-fonts     - download Noto fonts for PDF generation"
 	@echo "  make docker-up       - start db + api via docker compose"
 	@echo "  make docker-down     - stop docker compose stack"
 	@echo "  make frontend-dev    - start the SvelteKit dev server"
@@ -45,6 +46,9 @@ seed:
 
 seed-admin:
 	go run ./cmd/seed --admin-phone=$(PHONE)
+
+fetch-fonts:
+	bash scripts/fetch-fonts.sh
 
 docker-up:
 	docker compose up -d --build

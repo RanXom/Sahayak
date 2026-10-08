@@ -9,6 +9,9 @@
 .env
 *.local
 
+# Downloaded PDF fonts (see fonts/README.md, fetch with `make fetch-fonts`)
+/fonts/*.ttf
+
 # Nix / direnv
 .direnv/
 .pgdata/

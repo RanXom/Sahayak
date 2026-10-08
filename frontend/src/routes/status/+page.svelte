@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { api, ApiError } from '$lib/api/client';
+	import { api, ApiError, apiBase } from '$lib/api/client';
 	import { authenticated } from '$lib/stores/auth';
 	import { language, translate, type Lang } from '$lib/i18n';
 	import StatusChip from '$lib/components/StatusChip.svelte';
@@ -38,6 +38,26 @@
 			apps = a.applications as AppRow[];
 		} catch (e) {
 			error = e instanceof ApiError ? e.message : 'Could not record submission';
+		}
+	}
+
+	async function downloadPdf(appId: string) {
+		try {
+			await api.generatePdf(appId, lang);
+			const token = localStorage.getItem('sahayak_access');
+			const res = await fetch(`${apiBase()}/applications/${appId}/pdf`, {
+				headers: { Authorization: `Bearer ${token}`, 'Accept-Language': lang }
+			});
+			if (!res.ok) throw new Error('Could not download PDF');
+			const blob = await res.blob();
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = `sahayak-${appId.slice(0, 8)}.pdf`;
+			a.click();
+			URL.revokeObjectURL(url);
+		} catch (e) {
+			error = e instanceof ApiError ? e.message : 'Could not generate PDF';
 		}
 	}
 
@@ -87,6 +107,9 @@
 						<input class="input" placeholder={t('reference')} bind:value={refs[a.id]} />
 						<button class="btn sm" onclick={() => submit(a.id)}>{t('record_reference')}</button>
 					</div>
+					<button class="btn ghost sm" style="margin-top:10px" onclick={() => downloadPdf(a.id)}>
+						{t('download_pdf')}
+					</button>
 				</article>
 			{/each}
 		</div>

@@ -20,7 +20,7 @@
 
 	onMount(async () => {
 		try {
-			view = await api.createApplication(page.params.schemeId as string);
+			view = await api.createApplication(page.params.schemeId as string, lang);
 			form = { ...view.auto_filled };
 			for (const f of view.form_fields) {
 				if (form[f.name] === undefined && f.value !== undefined) form[f.name] = f.value;
@@ -62,10 +62,10 @@
 		error = '';
 		try {
 			await api.updateApplicationForm(view.application.id, form);
-			await api.generatePdf(view.application.id);
+			await api.generatePdf(view.application.id, lang);
 			const token = localStorage.getItem('sahayak_access');
 			const res = await fetch(`${apiBase()}/applications/${view.application.id}/pdf`, {
-				headers: { Authorization: `Bearer ${token}` }
+				headers: { Authorization: `Bearer ${token}`, 'Accept-Language': lang }
 			});
 			const blob = await res.blob();
 			const url = URL.createObjectURL(blob);

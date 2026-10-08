@@ -181,10 +181,10 @@ func (s *Server) initModules() {
 	})
 	s.conversationHandler = conversation.NewHandler(convSvc, audioStore, s.cfg.MaxAudioMB)
 
-	pdfGen, err := application.NewPDFGenerator(s.cfg.PDFDir, s.cfg.FontDir)
+	pdfGen, err := application.NewPDFGenerator(s.cfg.PDFDir, s.cfg.FontDir, s.translateProvider())
 	if err != nil {
 		s.logger.Error("pdf_generator_init_failed", "error", err)
-		pdfGen, _ = application.NewPDFGenerator(os.TempDir()+"/sahayak-pdfs", s.cfg.FontDir)
+		pdfGen, _ = application.NewPDFGenerator(os.TempDir()+"/sahayak-pdfs", s.cfg.FontDir, s.translateProvider())
 	}
 	appRepo := application.NewRepository(s.pool)
 	appSvc := application.NewService(appRepo, schemeRepo, profileRepo, pdfGen)
