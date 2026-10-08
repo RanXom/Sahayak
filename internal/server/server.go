@@ -14,6 +14,7 @@ import (
 	"github.com/sahayak/sahayak/internal/config"
 	"github.com/sahayak/sahayak/internal/crypto"
 	"github.com/sahayak/sahayak/internal/domain"
+	"github.com/sahayak/sahayak/internal/document"
 	"github.com/sahayak/sahayak/internal/location"
 	"github.com/sahayak/sahayak/internal/middleware"
 	"github.com/sahayak/sahayak/internal/profile"
@@ -41,6 +42,7 @@ type Server struct {
 	profileHandler  *profile.Handler
 	schemeHandler   *scheme.Handler
 	sourceHandler   *source.Handler
+	documentHandler *document.Handler
 
 	// Rate limiters
 	anonLimiter  *middleware.RateLimiter
@@ -111,6 +113,10 @@ func (s *Server) initModules() {
 
 	sourceRepo := source.NewRepository(s.pool)
 	s.sourceHandler = source.NewHandler(source.NewService(sourceRepo))
+
+	documentRepo := document.NewRepository(s.pool)
+	documentSvc := document.NewService(documentRepo, schemeRepo, profileRepo)
+	s.documentHandler = document.NewHandler(documentSvc)
 }
 
 func (s *Server) buildRouter() {
@@ -133,6 +139,7 @@ func (s *Server) buildRouter() {
 			r.Post("/auth/refresh", s.authHandler.Refresh)
 			r.Get("/locations/states", s.locationHandler.ListStates)
 			r.Get("/locations/states/{id}/districts", s.locationHandler.ListDistricts)
+			r.Get("/documents/types", s.documentHandler.ListTypes)
 		})
 
 		// Authenticated routes (citizen, helper, admin)
@@ -150,6 +157,7 @@ func (s *Server) buildRouter() {
 			r.Put("/profile/documents", s.profileHandler.UpdateDocuments)
 
 			r.Get("/schemes/{id}", s.schemeHandler.Get)
+			r.Get("/schemes/{id}/documents", s.documentHandler.SchemeDocuments)
 		})
 
 		// Admin routes
