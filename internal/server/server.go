@@ -54,6 +54,7 @@ type Server struct {
 	sourceHandler       *source.Handler
 	documentHandler     *document.Handler
 	eligibilityHandler  *eligibility.Handler
+	auditHandler        *audit.Handler
 	conversationHandler *conversation.Handler
 	applicationHandler  *application.Handler
 	notificationHandler *notification.Handler
@@ -105,6 +106,7 @@ func (s *Server) initRateLimiters() {
 func (s *Server) initModules() {
 	auditRepo := audit.NewRepository(s.pool)
 	auditLogger := audit.NewDBLogger(auditRepo, s.logger)
+	s.auditHandler = audit.NewHandler(auditRepo)
 
 	cipher, err := crypto.New(s.cfg.PhoneHashPepper)
 	if err != nil {
@@ -348,6 +350,11 @@ func (s *Server) buildRouter() {
 			r.Get("/admin/candidates", s.sourceHandler.ListCandidates)
 			r.Post("/admin/candidates/{id}/accept", s.sourceHandler.AcceptCandidate)
 			r.Post("/admin/candidates/{id}/reject", s.sourceHandler.RejectCandidate)
+
+			r.Get("/admin/audit", s.auditHandler.Query)
+
+			r.Get("/admin/helpers", s.helperHandler.AdminList)
+			r.Post("/admin/helpers/{userId}/verify", s.helperHandler.AdminVerify)
 		})
 	})
 
