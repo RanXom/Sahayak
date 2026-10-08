@@ -1,9 +1,11 @@
 # Sahayak production stack (Coolify-compatible).
 #
 # Coolify reads this file when the Build Pack is "Docker Compose". Set the
-# domains per service in the Coolify UI:
-#   frontend -> https://YOUR_DOMAIN:3000
-#   api      -> https://YOUR_DOMAIN:8080/api   (then disable "Strip Prefixes")
+# domains per service in the Coolify UI (separate subdomains; no path prefix):
+#   frontend -> https://APP_DOMAIN:3000            (e.g. sahayak.shizain.me)
+#   api      -> https://API_DOMAIN:8080            (e.g. api.shizain.me)
+# Then set VITE_API_URL=https://API_DOMAIN/api/v1 and
+# CORS_ALLOWED_ORIGINS=https://APP_DOMAIN in the Coolify environment.
 # Databases and internal services need no domain.
 #
 # Host ports are intentionally NOT published; Coolify's proxy reaches the
@@ -96,7 +98,9 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: /api/v1
+        # Overridable at deploy time. Same-domain setups use /api/v1; split
+        # subdomains use the absolute API URL (Coolify bakes it into the build).
+        VITE_API_URL: ${VITE_API_URL:-/api/v1}
     expose:
       - "3000"
     environment:
