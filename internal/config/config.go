@@ -45,6 +45,10 @@ type Config struct {
 	FontDir     string
 	MaxAudioSec int
 	MaxAudioMB  int
+
+	AllowedOrigins []string
+
+	RateLimit RateLimitConfig
 }
 
 type BhashiniConfig struct {
@@ -69,6 +73,18 @@ type OpenAIConfig struct {
 	APIKey  string
 	Model   string
 	BaseURL string
+}
+
+type RateLimitConfig struct {
+	AnonPerMinute        int
+	AnonPerHour          int
+	CitizenPerMinute     int
+	CitizenPerHour       int
+	VoicePerMinute       int
+	VoicePerHour         int
+	OTPPerPhone10Min     int
+	OTPPerPhoneDay       int
+	HelperSessionsPerDay int
 }
 
 // Load reads configuration from the environment (and an optional .env file).
@@ -117,6 +133,18 @@ func Load() (*Config, error) {
 		FontDir:          getEnv("FONT_DIR", "./fonts"),
 		MaxAudioSec:      getEnvInt("MAX_AUDIO_SECONDS", 60),
 		MaxAudioMB:       getEnvInt("MAX_AUDIO_MB", 5),
+		AllowedOrigins:   splitCSV(getEnv("CORS_ALLOWED_ORIGINS", "")),
+		RateLimit: RateLimitConfig{
+			AnonPerMinute:        getEnvInt("RATE_ANON_PER_MIN", 30),
+			AnonPerHour:          getEnvInt("RATE_ANON_PER_HOUR", 200),
+			CitizenPerMinute:     getEnvInt("RATE_CITIZEN_PER_MIN", 60),
+			CitizenPerHour:       getEnvInt("RATE_CITIZEN_PER_HOUR", 500),
+			VoicePerMinute:       getEnvInt("RATE_VOICE_PER_MIN", 10),
+			VoicePerHour:         getEnvInt("RATE_VOICE_PER_HOUR", 100),
+			OTPPerPhone10Min:     getEnvInt("RATE_OTP_PER_10MIN", 3),
+			OTPPerPhoneDay:       getEnvInt("RATE_OTP_PER_DAY", 10),
+			HelperSessionsPerDay: getEnvInt("RATE_HELPER_SESSIONS_PER_DAY", 50),
+		},
 	}
 
 	if cfg.JWTSecret == "" {
@@ -150,4 +178,18 @@ func getEnvInt(key string, fallback int) int {
 		}
 	}
 	return fallback
+}
+
+func splitCSV(s string) []string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
