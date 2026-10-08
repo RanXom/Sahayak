@@ -13,8 +13,9 @@ import (
 	"github.com/sahayak/sahayak/internal/auth"
 	"github.com/sahayak/sahayak/internal/config"
 	"github.com/sahayak/sahayak/internal/crypto"
-	"github.com/sahayak/sahayak/internal/domain"
 	"github.com/sahayak/sahayak/internal/document"
+	"github.com/sahayak/sahayak/internal/domain"
+	"github.com/sahayak/sahayak/internal/eligibility"
 	"github.com/sahayak/sahayak/internal/location"
 	"github.com/sahayak/sahayak/internal/middleware"
 	"github.com/sahayak/sahayak/internal/profile"
@@ -38,11 +39,12 @@ type Server struct {
 	authService *auth.Service
 	authHandler *auth.Handler
 
-	locationHandler *location.Handler
-	profileHandler  *profile.Handler
-	schemeHandler   *scheme.Handler
-	sourceHandler   *source.Handler
-	documentHandler *document.Handler
+	locationHandler    *location.Handler
+	profileHandler     *profile.Handler
+	schemeHandler      *scheme.Handler
+	sourceHandler      *source.Handler
+	documentHandler    *document.Handler
+	eligibilityHandler *eligibility.Handler
 
 	// Rate limiters
 	anonLimiter  *middleware.RateLimiter
@@ -117,6 +119,9 @@ func (s *Server) initModules() {
 	documentRepo := document.NewRepository(s.pool)
 	documentSvc := document.NewService(documentRepo, schemeRepo, profileRepo)
 	s.documentHandler = document.NewHandler(documentSvc)
+
+	eligibilitySvc := eligibility.NewService(profileRepo, schemeSvc, locationRepo, documentSvc)
+	s.eligibilityHandler = eligibility.NewHandler(eligibilitySvc)
 }
 
 func (s *Server) buildRouter() {
@@ -158,6 +163,9 @@ func (s *Server) buildRouter() {
 
 			r.Get("/schemes/{id}", s.schemeHandler.Get)
 			r.Get("/schemes/{id}/documents", s.documentHandler.SchemeDocuments)
+
+			r.Post("/eligibility/evaluate", s.eligibilityHandler.Evaluate)
+			r.Get("/eligibility/results", s.eligibilityHandler.Results)
 		})
 
 		// Admin routes
