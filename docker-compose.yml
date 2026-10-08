@@ -98,9 +98,8 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        # Overridable at deploy time. Same-domain setups use /api/v1; split
-        # subdomains use the absolute API URL (Coolify bakes it into the build).
-        VITE_API_URL: ${VITE_API_URL:-/api/v1}
+        # Absolute API URL baked into the frontend build (split subdomains).
+        VITE_API_URL: https://api.shizain.me/api/v1
     expose:
       - "3000"
     environment:
