@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS coverage_status;
+DROP TABLE IF EXISTS districts;
+DROP TABLE IF EXISTS states;
