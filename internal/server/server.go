@@ -13,6 +13,7 @@ import (
 	"github.com/sahayak/sahayak/internal/auth"
 	"github.com/sahayak/sahayak/internal/config"
 	"github.com/sahayak/sahayak/internal/crypto"
+	"github.com/sahayak/sahayak/internal/location"
 	"github.com/sahayak/sahayak/internal/middleware"
 )
 
@@ -31,6 +32,8 @@ type Server struct {
 	tokens      *auth.TokenManager
 	authService *auth.Service
 	authHandler *auth.Handler
+
+	locationHandler *location.Handler
 
 	// Rate limiters
 	anonLimiter  *middleware.RateLimiter
@@ -87,6 +90,9 @@ func (s *Server) initModules() {
 		OTPPerDay:   s.cfg.RateLimit.OTPPerPhoneDay,
 	})
 	s.authHandler = auth.NewHandler(s.authService)
+
+	locationRepo := location.NewRepository(s.pool)
+	s.locationHandler = location.NewHandler(location.NewService(locationRepo))
 }
 
 func (s *Server) buildRouter() {
@@ -107,6 +113,8 @@ func (s *Server) buildRouter() {
 			r.Post("/auth/otp/request", s.authHandler.RequestOTP)
 			r.Post("/auth/otp/verify", s.authHandler.VerifyOTP)
 			r.Post("/auth/refresh", s.authHandler.Refresh)
+			r.Get("/locations/states", s.locationHandler.ListStates)
+			r.Get("/locations/states/{id}/districts", s.locationHandler.ListDistricts)
 		})
 
 		// Authenticated routes (citizen, helper, admin)
