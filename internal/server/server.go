@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/sahayak/sahayak/internal/application"
 	"github.com/sahayak/sahayak/internal/audit"
 	"github.com/sahayak/sahayak/internal/auth"
 	"github.com/sahayak/sahayak/internal/config"
@@ -47,6 +48,7 @@ type Server struct {
 	documentHandler     *document.Handler
 	eligibilityHandler  *eligibility.Handler
 	conversationHandler *conversation.Handler
+	applicationHandler  *application.Handler
 	audioStore          *conversation.FileAudioStore
 
 	// Rate limiters
@@ -145,6 +147,14 @@ func (s *Server) initModules() {
 		Eligibility: eligibilitySvc,
 	})
 	s.conversationHandler = conversation.NewHandler(convSvc, audioStore, s.cfg.MaxAudioMB)
+
+	pdfGen, err := application.NewPDFGenerator(s.cfg.PDFDir, s.cfg.FontDir)
+	if err != nil {
+		s.logger.Error("pdf_generator_init_failed", "error", err)
+	}
+	appRepo := application.NewRepository(s.pool)
+	appSvc := application.NewService(appRepo, schemeRepo, profileRepo, pdfGen)
+	s.applicationHandler = application.NewHandler(appSvc)
 }
 
 func (s *Server) buildRouter() {
@@ -195,6 +205,15 @@ func (s *Server) buildRouter() {
 			r.Get("/conversations/{id}", s.conversationHandler.Get)
 			r.Post("/conversations/{id}/message", s.conversationHandler.Message)
 			r.Post("/conversations/{id}/voice", s.conversationHandler.Voice)
+
+			r.Post("/applications", s.applicationHandler.Create)
+			r.Get("/applications", s.applicationHandler.List)
+			r.Get("/applications/{id}", s.applicationHandler.Get)
+			r.Put("/applications/{id}/form", s.applicationHandler.UpdateForm)
+			r.Post("/applications/{id}/pdf", s.applicationHandler.GeneratePDF)
+			r.Get("/applications/{id}/pdf", s.applicationHandler.DownloadPDF)
+			r.Post("/applications/{id}/submit", s.applicationHandler.Submit)
+			r.Put("/applications/{id}/status", s.applicationHandler.UpdateStatus)
 		})
 
 		// Admin routes
