@@ -12,6 +12,7 @@ import (
 	"github.com/sahayak/sahayak/internal/audit"
 	"github.com/sahayak/sahayak/internal/auth"
 	"github.com/sahayak/sahayak/internal/config"
+	"github.com/sahayak/sahayak/internal/conversation"
 	"github.com/sahayak/sahayak/internal/crypto"
 	"github.com/sahayak/sahayak/internal/document"
 	"github.com/sahayak/sahayak/internal/domain"
@@ -39,12 +40,14 @@ type Server struct {
 	authService *auth.Service
 	authHandler *auth.Handler
 
-	locationHandler    *location.Handler
-	profileHandler     *profile.Handler
-	schemeHandler      *scheme.Handler
-	sourceHandler      *source.Handler
-	documentHandler    *document.Handler
-	eligibilityHandler *eligibility.Handler
+	locationHandler     *location.Handler
+	profileHandler      *profile.Handler
+	schemeHandler       *scheme.Handler
+	sourceHandler       *source.Handler
+	documentHandler     *document.Handler
+	eligibilityHandler  *eligibility.Handler
+	conversationHandler *conversation.Handler
+	audioStore          *conversation.FileAudioStore
 
 	// Rate limiters
 	anonLimiter  *middleware.RateLimiter
@@ -122,6 +125,26 @@ func (s *Server) initModules() {
 
 	eligibilitySvc := eligibility.NewService(profileRepo, schemeSvc, locationRepo, documentSvc)
 	s.eligibilityHandler = eligibility.NewHandler(eligibilitySvc)
+
+	audioStore, err := conversation.NewFileAudioStore(s.cfg.DataDir + "/audio")
+	if err != nil {
+		s.logger.Error("audio_store_init_failed", "error", err)
+	}
+	s.audioStore = audioStore
+	stt, tts := s.voiceProviders()
+	convSvc := conversation.NewService(conversation.Deps{
+		Repo:        conversation.NewRepository(s.pool),
+		Profiles:    profileSvc,
+		LLM:         s.llmProvider(),
+		STT:         stt,
+		TTS:         tts,
+		Audio:       audioStore,
+		Location:    locationRepo,
+		Audit:       auditLogger,
+		Logger:      s.logger,
+		Eligibility: eligibilitySvc,
+	})
+	s.conversationHandler = conversation.NewHandler(convSvc, audioStore, s.cfg.MaxAudioMB)
 }
 
 func (s *Server) buildRouter() {
@@ -142,6 +165,7 @@ func (s *Server) buildRouter() {
 			r.Post("/auth/otp/request", s.authHandler.RequestOTP)
 			r.Post("/auth/otp/verify", s.authHandler.VerifyOTP)
 			r.Post("/auth/refresh", s.authHandler.Refresh)
+			r.Get("/config", s.handleConfig)
 			r.Get("/locations/states", s.locationHandler.ListStates)
 			r.Get("/locations/states/{id}/districts", s.locationHandler.ListDistricts)
 			r.Get("/documents/types", s.documentHandler.ListTypes)
@@ -166,6 +190,11 @@ func (s *Server) buildRouter() {
 
 			r.Post("/eligibility/evaluate", s.eligibilityHandler.Evaluate)
 			r.Get("/eligibility/results", s.eligibilityHandler.Results)
+
+			r.Post("/conversations", s.conversationHandler.Start)
+			r.Get("/conversations/{id}", s.conversationHandler.Get)
+			r.Post("/conversations/{id}/message", s.conversationHandler.Message)
+			r.Post("/conversations/{id}/voice", s.conversationHandler.Voice)
 		})
 
 		// Admin routes
