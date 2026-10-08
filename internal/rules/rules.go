@@ -1,14 +1,20 @@
-// Package rules provides safe evaluation of expr-lang eligibility
+// Package rules provides safe, cached evaluation of expr-lang eligibility
 // expressions plus AST utilities used to detect missing profile fields.
 package rules
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/ast"
 	"github.com/expr-lang/expr/parser"
 	"github.com/expr-lang/expr/vm"
+)
+
+var (
+	cacheMu sync.RWMutex
+	cache   = map[string]*vm.Program{}
 )
 
 // KnownVariables is the set of identifiers that eligibility expressions may
@@ -78,7 +84,20 @@ func ExtractFields(expression string) ([]string, error) {
 }
 
 func compile(expression string) (*vm.Program, error) {
-	return expr.Compile(expression, expr.AsBool())
+	cacheMu.RLock()
+	p, ok := cache[expression]
+	cacheMu.RUnlock()
+	if ok {
+		return p, nil
+	}
+	p, err := expr.Compile(expression, expr.AsBool())
+	if err != nil {
+		return nil, err
+	}
+	cacheMu.Lock()
+	cache[expression] = p
+	cacheMu.Unlock()
+	return p, nil
 }
 
 type identVisitor struct {
