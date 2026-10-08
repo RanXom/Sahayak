@@ -19,6 +19,7 @@ import (
 	"github.com/sahayak/sahayak/internal/document"
 	"github.com/sahayak/sahayak/internal/domain"
 	"github.com/sahayak/sahayak/internal/eligibility"
+	"github.com/sahayak/sahayak/internal/helper"
 	"github.com/sahayak/sahayak/internal/location"
 	"github.com/sahayak/sahayak/internal/middleware"
 	"github.com/sahayak/sahayak/internal/notification"
@@ -53,6 +54,8 @@ type Server struct {
 	applicationHandler  *application.Handler
 	notificationHandler *notification.Handler
 	notificationSvc     *notification.Service
+	helperHandler       *helper.Handler
+	helperSvc           *helper.Service
 	audioStore          *conversation.FileAudioStore
 
 	// Rate limiters
@@ -181,6 +184,10 @@ func (s *Server) initModules() {
 			Params:        map[string]string{"status": status},
 		})
 	})
+
+	helperRepo := helper.NewRepository(s.pool)
+	s.helperSvc = helper.NewService(helperRepo, auditLogger, s.cfg.RateLimit.HelperSessionsPerDay)
+	s.helperHandler = helper.NewHandler(s.helperSvc)
 }
 
 // NotificationService exposes the notification service (used by other modules).
@@ -247,6 +254,23 @@ func (s *Server) buildRouter() {
 			r.Get("/notifications", s.notificationHandler.List)
 			r.Get("/notifications/preferences", s.notificationHandler.GetPreferences)
 			r.Put("/notifications/preferences", s.notificationHandler.UpdatePreferences)
+
+			r.Post("/helper/register", s.helperHandler.Register)
+		})
+
+		// Helper routes (verified helpers and admins)
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.Authenticate(s.tokens))
+			r.Use(middleware.RequireRole(domain.RoleHelper, domain.RoleAdmin))
+			r.Use(middleware.RequireVerifiedHelper(s.helperSvc))
+			r.Use(middleware.Limit(s.userLimiter, middleware.UserKey))
+
+			r.Get("/helper/dashboard", s.helperHandler.Dashboard)
+			r.Post("/helper/sessions", s.helperHandler.StartSession)
+			r.Get("/helper/sessions", s.helperHandler.ListSessions)
+			r.Get("/helper/sessions/{id}", s.helperHandler.GetSession)
+			r.Post("/helper/sessions/{id}/consent", s.helperHandler.RecordConsent)
+			r.Post("/helper/sessions/{id}/end", s.helperHandler.EndSession)
 		})
 
 		// Admin routes
