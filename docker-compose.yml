@@ -52,6 +52,8 @@ services:
       APP_ENV: ${APP_ENV:-production}
       PORT: "8080"
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      HTTP_READ_TIMEOUT_SEC: ${HTTP_READ_TIMEOUT_SEC:-60}
+      HTTP_WRITE_TIMEOUT_SEC: ${HTTP_WRITE_TIMEOUT_SEC:-240}
       SERVER_MODE: all
       DATABASE_URL: postgres://${POSTGRES_USER:-sahayak}:${POSTGRES_PASSWORD:-sahayak}@db:5432/${POSTGRES_DB:-sahayak}?sslmode=disable
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
@@ -63,6 +65,7 @@ services:
       BHASHINI_API_KEY: ${BHASHINI_API_KEY:-}
       BHASHINI_USER_ID: ${BHASHINI_USER_ID:-}
       LLM_PROVIDER: ${LLM_PROVIDER:-gemini}
+      LLM_TIMEOUT_SEC: ${LLM_TIMEOUT_SEC:-45}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}

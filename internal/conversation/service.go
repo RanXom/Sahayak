@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/sahayak/sahayak/internal/audit"
 	"github.com/sahayak/sahayak/internal/domain"
@@ -148,11 +149,13 @@ func (s *Service) HandleVoice(ctx context.Context, userID, convID string, audio 
 	}
 	// Ask the STT provider to auto-detect the spoken language rather than
 	// forcing the UI language, then mirror whatever was actually spoken.
+	sttStart := time.Now()
 	res, err := s.stt.Transcribe(ctx, audio, "", format)
 	if err != nil {
-		s.logger.Error("stt_failed", "provider_error", err.Error(), "language", lang)
+		s.logger.Error("stt_failed", "provider_error", err.Error(), "language", lang, "duration_ms", time.Since(sttStart).Milliseconds())
 		return nil, domain.Unavailable("Could not understand the audio. Please try again or type your response.")
 	}
+	s.logger.Info("stt_ok", "language", res.Language, "chars", len(res.Text), "duration_ms", time.Since(sttStart).Milliseconds())
 	if strings.TrimSpace(res.Text) == "" {
 		return nil, domain.InvalidInput("We could not hear anything. Please try again.")
 	}
@@ -212,6 +215,7 @@ func (s *Service) process(ctx context.Context, userID string, conv *Conversation
 	}
 
 	// 1. Extract facts.
+	extractStart := time.Now()
 	extraction, err := s.llm.ExtractFacts(ctx, llm.ExtractFactsRequest{
 		UserText:       text,
 		CurrentProfile: p.Facts,
@@ -219,8 +223,10 @@ func (s *Service) process(ctx context.Context, userID string, conv *Conversation
 	})
 	if err != nil {
 		// Degrade gracefully: no facts extracted, still record the message.
-		s.logger.Warn("llm_extract_failed", "error", err.Error(), "language", lang)
+		s.logger.Warn("llm_extract_failed", "error", err.Error(), "language", lang, "duration_ms", time.Since(extractStart).Milliseconds())
 		extraction = &llm.ExtractFactsResponse{Facts: map[string]any{}}
+	} else {
+		s.logger.Debug("llm_extract_ok", "language", lang, "facts", len(extraction.Facts), "duration_ms", time.Since(extractStart).Milliseconds())
 	}
 	facts := profile.SanitizeExtractedFacts(extraction.Facts)
 
@@ -275,6 +281,7 @@ func (s *Service) process(ctx context.Context, userID string, conv *Conversation
 			responseText = readyText(lang)
 		}
 	case !ready:
+		followUpStart := time.Now()
 		fu, err := s.llm.GenerateFollowUp(ctx, llm.FollowUpRequest{
 			UserText:      text,
 			ProfileFacts:  updatedProfile.Facts,
@@ -284,8 +291,14 @@ func (s *Service) process(ctx context.Context, userID string, conv *Conversation
 			Context:       convCtx,
 		})
 		if err != nil || fu.Question == "" {
+			if err != nil {
+				s.logger.Warn("llm_followup_failed", "error", err.Error(), "language", lang, "field", nextField)
+			}
 			fu = &llm.FollowUpResponse{Question: llm.QuestionForField(nextField, lang), QuestionAbout: nextField}
 		}
+		s.logger.Info("llm_followup_generated",
+			"language", lang, "field", nextField,
+			"chars", len(fu.Question), "duration_ms", time.Since(followUpStart).Milliseconds())
 		responseText = fu.Question
 		result.FollowUp = &FollowUp{QuestionAbout: fu.QuestionAbout, IsLastQuestion: false}
 		asked = append(asked, nextField)
@@ -299,12 +312,17 @@ func (s *Service) process(ctx context.Context, userID string, conv *Conversation
 		}
 	}
 
-	// 6. Synthesize speech (best effort).
+	// 6. Synthesize speech (best effort). The exact text above — whether the
+	// LLM answer or the deterministic fallback — is what gets spoken.
 	if s.tts != nil && responseText != "" {
+		ttsStart := time.Now()
 		if synth, err := s.tts.Synthesize(ctx, responseText, lang); err == nil && len(synth.Audio) > 0 {
 			if id, err := s.audio.Save(synth.Audio, synth.Format); err == nil {
 				result.ResponseAudioURL = "/api/v1/audio/temp/" + id
 			}
+			s.logger.Info("tts_synth_ok", "language", lang, "chars", len(responseText), "bytes", len(synth.Audio), "duration_ms", time.Since(ttsStart).Milliseconds())
+		} else if err != nil {
+			s.logger.Warn("tts_synth_failed", "error", err.Error(), "language", lang, "duration_ms", time.Since(ttsStart).Milliseconds())
 		}
 	}
 	result.ResponseText = responseText

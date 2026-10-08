@@ -19,19 +19,23 @@ type GeminiProvider struct {
 	Client  *http.Client
 }
 
-// NewGeminiProvider constructs a Gemini provider.
-func NewGeminiProvider(apiKey, model, baseURL string) *GeminiProvider {
+// NewGeminiProvider constructs a Gemini provider. A non-positive timeout uses
+// a 45s default, which tolerates slow networks and transient model load.
+func NewGeminiProvider(apiKey, model, baseURL string, timeout time.Duration) *GeminiProvider {
 	if model == "" {
 		model = "gemini-1.5-flash"
 	}
 	if baseURL == "" {
 		baseURL = "https://generativelanguage.googleapis.com/v1beta"
 	}
+	if timeout <= 0 {
+		timeout = 45 * time.Second
+	}
 	return &GeminiProvider{
 		APIKey:  apiKey,
 		Model:   model,
 		BaseURL: strings.TrimRight(baseURL, "/"),
-		Client:  &http.Client{Timeout: 30 * time.Second},
+		Client:  &http.Client{Timeout: timeout},
 	}
 }
 
@@ -78,33 +82,51 @@ func (p *GeminiProvider) generate(ctx context.Context, system, user string, json
 		return "", err
 	}
 	url := fmt.Sprintf("%s/models/%s:generateContent?key=%s", p.BaseURL, p.Model, p.APIKey)
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		return "", err
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := p.Client.Do(httpReq)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode >= 300 {
-		return "", fmt.Errorf("gemini status %d: %s", resp.StatusCode, string(respBody))
-	}
+	// Gemini frequently returns transient 429/503 ("high demand") responses.
+	// Retry those once with a short backoff before letting the chain fail over.
+	var lastErr error
+	for attempt := 0; attempt < 2; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-time.After(700 * time.Millisecond):
+			}
+		}
+		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+		if err != nil {
+			return "", err
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
 
-	var gr geminiResponse
-	if err := json.Unmarshal(respBody, &gr); err != nil {
-		return "", fmt.Errorf("decode gemini response: %w", err)
+		resp, err := p.Client.Do(httpReq)
+		if err != nil {
+			return "", err
+		}
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		resp.Body.Close()
+		if resp.StatusCode >= 300 {
+			lastErr = fmt.Errorf("gemini status %d: %s", resp.StatusCode, string(respBody))
+			if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+				continue
+			}
+			return "", lastErr
+		}
+
+		var gr geminiResponse
+		if err := json.Unmarshal(respBody, &gr); err != nil {
+			return "", fmt.Errorf("decode gemini response: %w", err)
+		}
+		if gr.Error != nil {
+			return "", fmt.Errorf("gemini error: %s", gr.Error.Message)
+		}
+		if len(gr.Candidates) == 0 || len(gr.Candidates[0].Content.Parts) == 0 {
+			return "", fmt.Errorf("gemini returned no content")
+		}
+		return gr.Candidates[0].Content.Parts[0].Text, nil
 	}
-	if gr.Error != nil {
-		return "", fmt.Errorf("gemini error: %s", gr.Error.Message)
-	}
-	if len(gr.Candidates) == 0 || len(gr.Candidates[0].Content.Parts) == 0 {
-		return "", fmt.Errorf("gemini returned no content")
-	}
-	return gr.Candidates[0].Content.Parts[0].Text, nil
+	return "", lastErr
 }
 
 // ExtractFacts extracts structured facts from user text.
@@ -131,11 +153,14 @@ func (p *GeminiProvider) GenerateFollowUp(ctx context.Context, req FollowUpReque
 	}
 	out, err := p.generate(ctx, FollowUpSystemPrompt(req.Language), BuildFollowUpUserPrompt(req), true)
 	if err != nil {
-		return &FollowUpResponse{Question: QuestionForField(field, req.Language), QuestionAbout: field}, nil
+		return nil, err
 	}
 	var res FollowUpResponse
-	if err := json.Unmarshal([]byte(stripCodeFence(out)), &res); err != nil || res.Question == "" {
-		return &FollowUpResponse{Question: QuestionForField(field, req.Language), QuestionAbout: field}, nil
+	if err := json.Unmarshal([]byte(stripCodeFence(out)), &res); err != nil {
+		return nil, fmt.Errorf("parse gemini follow-up JSON: %w", err)
+	}
+	if strings.TrimSpace(res.Question) == "" {
+		return nil, fmt.Errorf("gemini returned an empty follow-up")
 	}
 	if res.QuestionAbout == "" {
 		res.QuestionAbout = field
@@ -152,11 +177,11 @@ func (p *GeminiProvider) GenerateExplanation(ctx context.Context, req Explanatio
 
 	out, err := p.generate(ctx, system, user, false)
 	if err != nil {
-		return &ExplanationResponse{Text: FallbackExplanation(req)}, nil
+		return nil, err
 	}
 	text := strings.TrimSpace(out)
 	if text == "" {
-		text = FallbackExplanation(req)
+		return nil, fmt.Errorf("gemini returned an empty explanation")
 	}
 	return &ExplanationResponse{Text: text}, nil
 }

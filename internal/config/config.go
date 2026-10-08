@@ -28,6 +28,7 @@ type Config struct {
 	Bhashini      BhashiniConfig
 
 	LLMProvider string
+	LLMTimeout  time.Duration
 	Gemini      GeminiConfig
 	OpenAI      OpenAIConfig
 
@@ -45,6 +46,11 @@ type Config struct {
 	FontDir     string
 	MaxAudioSec int
 	MaxAudioMB  int
+
+	// HTTP timeouts. Voice turns make several slow upstream calls (STT, LLM,
+	// TTS) in one request, so the write timeout must accommodate them.
+	HTTPReadTimeout  time.Duration
+	HTTPWriteTimeout time.Duration
 
 	// DemoOTP, when non-empty, allows login with this fixed code and returns it
 	// in the OTP-request response. Intended for demos only.
@@ -116,6 +122,7 @@ func Load() (*Config, error) {
 			BaseURL: getEnv("BHASHINI_BASE_URL", "https://dhruva-api.bhashini.gov.in"),
 		},
 		LLMProvider: strings.ToLower(getEnv("LLM_PROVIDER", "gemini")),
+		LLMTimeout:  time.Duration(getEnvInt("LLM_TIMEOUT_SEC", 45)) * time.Second,
 		Gemini: GeminiConfig{
 			APIKey:  getEnv("GEMINI_API_KEY", ""),
 			Model:   getEnv("GEMINI_MODEL", "gemini-3.5-flash-lite"),
@@ -137,6 +144,8 @@ func Load() (*Config, error) {
 		FontDir:          getEnv("FONT_DIR", "./fonts"),
 		MaxAudioSec:      getEnvInt("MAX_AUDIO_SECONDS", 60),
 		MaxAudioMB:       getEnvInt("MAX_AUDIO_MB", 5),
+		HTTPReadTimeout:  time.Duration(getEnvInt("HTTP_READ_TIMEOUT_SEC", 60)) * time.Second,
+		HTTPWriteTimeout: time.Duration(getEnvInt("HTTP_WRITE_TIMEOUT_SEC", 240)) * time.Second,
 		DemoOTP:          getEnv("DEMO_OTP", ""),
 		AllowedOrigins:   splitCSV(getEnv("CORS_ALLOWED_ORIGINS", "")),
 		RateLimit: RateLimitConfig{

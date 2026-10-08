@@ -4,7 +4,10 @@
 // The LLM is never permitted to decide eligibility.
 package llm
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 // Message is a single conversation message supplied as context.
 type Message struct {
@@ -68,4 +71,22 @@ type Provider interface {
 	GenerateFollowUp(ctx context.Context, req FollowUpRequest) (*FollowUpResponse, error)
 	GenerateExplanation(ctx context.Context, req ExplanationRequest) (*ExplanationResponse, error)
 	DetectLanguage(ctx context.Context, text string) (string, error)
+}
+
+// Named wraps a Provider with a human-readable name so the failover chain can
+// log which provider answered or failed.
+type Named struct {
+	Name string
+	Provider
+}
+
+// ProviderName reports the wrapped provider's name.
+func (n Named) ProviderName() string { return n.Name }
+
+// providerName resolves a provider's log name, falling back to its Go type.
+func providerName(p Provider) string {
+	if n, ok := p.(interface{ ProviderName() string }); ok {
+		return n.ProviderName()
+	}
+	return fmt.Sprintf("%T", p)
 }

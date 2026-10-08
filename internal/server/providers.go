@@ -25,7 +25,7 @@ func (s *Server) geminiProvider() llm.Provider {
 	if s.cfg.Gemini.APIKey == "" {
 		return nil
 	}
-	return llm.NewGeminiProvider(s.cfg.Gemini.APIKey, s.cfg.Gemini.Model, s.cfg.Gemini.BaseURL)
+	return llm.NewGeminiProvider(s.cfg.Gemini.APIKey, s.cfg.Gemini.Model, s.cfg.Gemini.BaseURL, s.cfg.LLMTimeout)
 }
 
 // openAIProvider returns an OpenAI-compatible provider or nil when no key is set.
@@ -33,7 +33,7 @@ func (s *Server) openAIProvider() llm.Provider {
 	if s.cfg.OpenAI.APIKey == "" {
 		return nil
 	}
-	return llm.NewOpenAIProvider(s.cfg.OpenAI.APIKey, s.cfg.OpenAI.Model, s.cfg.OpenAI.BaseURL)
+	return llm.NewOpenAIProvider(s.cfg.OpenAI.APIKey, s.cfg.OpenAI.Model, s.cfg.OpenAI.BaseURL, s.cfg.LLMTimeout)
 }
 
 // llmProvider builds a failover chain: the configured provider first, the other
@@ -43,26 +43,29 @@ func (s *Server) llmProvider() llm.Provider {
 	gemini := s.geminiProvider()
 	openai := s.openAIProvider()
 
-	var primary, secondary llm.Provider
+	type named struct {
+		name string
+		p    llm.Provider
+	}
+	var ordered []named
 	if s.cfg.LLMProvider == "openai" {
-		primary, secondary = openai, gemini
+		ordered = []named{{"openai", openai}, {"gemini", gemini}}
 	} else {
-		primary, secondary = gemini, openai
+		ordered = []named{{"gemini", gemini}, {"openai", openai}}
 	}
 
 	var chain []llm.Provider
-	if primary != nil {
-		chain = append(chain, primary)
+	for _, n := range ordered {
+		if n.p != nil {
+			chain = append(chain, llm.Named{Name: n.name, Provider: n.p})
+		}
 	}
-	if secondary != nil {
-		chain = append(chain, secondary)
-	}
-	chain = append(chain, llm.NewFallbackProvider())
+	chain = append(chain, llm.Named{Name: "fallback", Provider: llm.NewFallbackProvider()})
 
 	if len(chain) == 1 {
 		return chain[0]
 	}
-	return llm.NewChain(chain...)
+	return llm.NewChainWithLogger(s.logger, chain...)
 }
 
 // llmLive reports whether at least one real LLM provider is configured.

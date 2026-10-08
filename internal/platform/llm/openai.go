@@ -19,19 +19,23 @@ type OpenAIProvider struct {
 	Client  *http.Client
 }
 
-// NewOpenAIProvider constructs an OpenAI-compatible provider.
-func NewOpenAIProvider(apiKey, model, baseURL string) *OpenAIProvider {
+// NewOpenAIProvider constructs an OpenAI-compatible provider. A non-positive
+// timeout uses a 45s default.
+func NewOpenAIProvider(apiKey, model, baseURL string, timeout time.Duration) *OpenAIProvider {
 	if model == "" {
 		model = "gpt-4o-mini"
 	}
 	if baseURL == "" {
 		baseURL = "https://api.openai.com/v1"
 	}
+	if timeout <= 0 {
+		timeout = 45 * time.Second
+	}
 	return &OpenAIProvider{
 		APIKey:  apiKey,
 		Model:   model,
 		BaseURL: strings.TrimRight(baseURL, "/"),
-		Client:  &http.Client{Timeout: 30 * time.Second},
+		Client:  &http.Client{Timeout: timeout},
 	}
 }
 
@@ -71,33 +75,51 @@ func (p *OpenAIProvider) generate(ctx context.Context, system, user string, json
 	if err != nil {
 		return "", err
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, p.BaseURL+"/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return "", err
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+p.APIKey)
+	url := p.BaseURL + "/chat/completions"
 
-	resp, err := p.Client.Do(httpReq)
-	if err != nil {
-		return "", err
+	// Retry transient 429/5xx responses once before letting the chain fail over.
+	var lastErr error
+	for attempt := 0; attempt < 2; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-time.After(700 * time.Millisecond):
+			}
+		}
+		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+		if err != nil {
+			return "", err
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
+		httpReq.Header.Set("Authorization", "Bearer "+p.APIKey)
+
+		resp, err := p.Client.Do(httpReq)
+		if err != nil {
+			return "", err
+		}
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		resp.Body.Close()
+		if resp.StatusCode >= 300 {
+			lastErr = fmt.Errorf("openai status %d: %s", resp.StatusCode, string(respBody))
+			if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+				continue
+			}
+			return "", lastErr
+		}
+		var cr chatResponse
+		if err := json.Unmarshal(respBody, &cr); err != nil {
+			return "", fmt.Errorf("decode openai response: %w", err)
+		}
+		if cr.Error != nil {
+			return "", fmt.Errorf("openai error: %s", cr.Error.Message)
+		}
+		if len(cr.Choices) == 0 {
+			return "", fmt.Errorf("openai returned no choices")
+		}
+		return cr.Choices[0].Message.Content, nil
 	}
-	defer resp.Body.Close()
-	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode >= 300 {
-		return "", fmt.Errorf("openai status %d: %s", resp.StatusCode, string(respBody))
-	}
-	var cr chatResponse
-	if err := json.Unmarshal(respBody, &cr); err != nil {
-		return "", fmt.Errorf("decode openai response: %w", err)
-	}
-	if cr.Error != nil {
-		return "", fmt.Errorf("openai error: %s", cr.Error.Message)
-	}
-	if len(cr.Choices) == 0 {
-		return "", fmt.Errorf("openai returned no choices")
-	}
-	return cr.Choices[0].Message.Content, nil
+	return "", lastErr
 }
 
 // ExtractFacts extracts structured facts from user text.
@@ -124,11 +146,14 @@ func (p *OpenAIProvider) GenerateFollowUp(ctx context.Context, req FollowUpReque
 	}
 	out, err := p.generate(ctx, FollowUpSystemPrompt(req.Language), BuildFollowUpUserPrompt(req), true)
 	if err != nil {
-		return &FollowUpResponse{Question: QuestionForField(field, req.Language), QuestionAbout: field}, nil
+		return nil, err
 	}
 	var res FollowUpResponse
-	if err := json.Unmarshal([]byte(stripCodeFence(out)), &res); err != nil || res.Question == "" {
-		return &FollowUpResponse{Question: QuestionForField(field, req.Language), QuestionAbout: field}, nil
+	if err := json.Unmarshal([]byte(stripCodeFence(out)), &res); err != nil {
+		return nil, fmt.Errorf("parse openai follow-up JSON: %w", err)
+	}
+	if strings.TrimSpace(res.Question) == "" {
+		return nil, fmt.Errorf("openai returned an empty follow-up")
 	}
 	if res.QuestionAbout == "" {
 		res.QuestionAbout = field
@@ -142,10 +167,14 @@ func (p *OpenAIProvider) GenerateExplanation(ctx context.Context, req Explanatio
 	user := fmt.Sprintf("Scheme: %s\nStatus: %s\nPassed: %s\nFailed: %s\nUnconfirmed: %s",
 		req.SchemeName, req.Status, strings.Join(req.PassedRules, "; "), strings.Join(req.FailedRules, "; "), strings.Join(req.MissingRules, "; "))
 	out, err := p.generate(ctx, system, user, false)
-	if err != nil || strings.TrimSpace(out) == "" {
-		return &ExplanationResponse{Text: FallbackExplanation(req)}, nil
+	if err != nil {
+		return nil, err
 	}
-	return &ExplanationResponse{Text: strings.TrimSpace(out)}, nil
+	text := strings.TrimSpace(out)
+	if text == "" {
+		return nil, fmt.Errorf("openai returned an empty explanation")
+	}
+	return &ExplanationResponse{Text: text}, nil
 }
 
 // DetectLanguage returns an ISO 639-1 code for the given text.

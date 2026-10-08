@@ -140,10 +140,11 @@ func BuildFollowUpUserPrompt(req FollowUpRequest) string {
 	} else {
 		b.WriteString(jsonString(req.ProfileFacts))
 	}
-	b.WriteString("\n\nNext information needed: ")
+	b.WriteString("\n\nNext information needed (field key): ")
 	b.WriteString(field)
-	b.WriteString("\nSuggested phrasing: ")
-	b.WriteString(QuestionForField(field, req.Language))
+	b.WriteString("\nAsk for this field naturally in ")
+	b.WriteString(languageName(req.Language))
+	b.WriteString(". Do NOT copy the example phrasing; use your own natural words that fit the context.")
 	if len(req.History) > 0 {
 		b.WriteString("\n\nRecent conversation (oldest first):")
 		for _, m := range req.History {
