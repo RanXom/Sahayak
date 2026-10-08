@@ -155,3 +155,48 @@ facts instead of failing the request.
   and never reach citizens.
 - **Eligibility rules** are `expr` expressions referencing a controlled fact vocabulary.
   Rules are validated (syntax + known fields) on save.
+
+## Eligibility engine
+
+Three-state evaluation per rule:
+
+- `pass` — condition met
+- `fail` — condition definitively not met
+- `unknown` — required data missing (does **not** mean ineligible)
+
+Scheme status: all mandatory rules pass → `eligible`; any mandatory rule unknown →
+`potentially_eligible`; any mandatory rule fails → `not_eligible`. Derived facts
+(`is_widow`, `has_student_child`, `student_child_class`, `state_code`, …) are computed
+during profile flattening.
+
+## Testing
+
+```bash
+make test          # go test ./...
+make test-race     # with race detector + coverage
+cd frontend && npm run check && npm run build
+
+# End-to-end API check against a running server (any shell):
+bash scripts/smoke.sh
+```
+
+## Docker
+
+```bash
+docker compose up -d --build
+# run migrations + seed inside the stack
+docker compose run --rm --entrypoint /app/migrate api up
+docker compose run --rm --entrypoint /app/seed api
+```
+
+In production, place a reverse proxy (Coolify/Traefik) in front so that `/api` is
+routed to the API service and everything else to the frontend.
+
+## Implemented milestones
+
+M0 foundation · M1 auth · M2 profile & location · M3 scheme data & admin ·
+M4 eligibility engine · M5 LLM integration · M6 voice providers ·
+M7 conversation/intake · M8 document system · M9 applications & PDF ·
+M10 frontend PWA · M11 notifications + River · M12 helper mode · M13 status tracking.
+
+See `sahayak-implementation-plan.md` for the full specification.
