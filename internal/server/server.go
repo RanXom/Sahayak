@@ -98,8 +98,16 @@ func (s *Server) Tokens() *auth.TokenManager { return s.tokens }
 
 func (s *Server) initRateLimiters() {
 	rl := s.cfg.RateLimit
-	s.anonLimiter = middleware.NewRateLimiter(middleware.RateLimitConfig{PerMinute: rl.AnonPerMinute, PerHour: rl.AnonPerHour})
-	s.userLimiter = middleware.NewRateLimiter(middleware.RateLimitConfig{PerMinute: rl.CitizenPerMinute, PerHour: rl.CitizenPerHour})
+	anonMin, anonHour := rl.AnonPerMinute, rl.AnonPerHour
+	userMin, userHour := rl.CitizenPerMinute, rl.CitizenPerHour
+	if s.cfg.DemoOTP != "" {
+		// A shared venue network can look like one client. Relax limits in demo mode.
+		anonMin, anonHour = anonMin*20, anonHour*20
+		userMin, userHour = userMin*20, userHour*20
+		s.logger.Warn("demo_mode_enabled", "detail", "fixed OTP login and relaxed rate limits are active")
+	}
+	s.anonLimiter = middleware.NewRateLimiter(middleware.RateLimitConfig{PerMinute: anonMin, PerHour: anonHour})
+	s.userLimiter = middleware.NewRateLimiter(middleware.RateLimitConfig{PerMinute: userMin, PerHour: userHour})
 	s.voiceLimiter = middleware.NewRateLimiter(middleware.RateLimitConfig{PerMinute: rl.VoicePerMinute, PerHour: rl.VoicePerHour})
 }
 
@@ -121,6 +129,7 @@ func (s *Server) initModules() {
 		Audit:       auditLogger,
 		Cipher:      cipher,
 		Pepper:      s.cfg.PhoneHashPepper,
+		DemoOTP:     s.cfg.DemoOTP,
 		OTPPer10Min: s.cfg.RateLimit.OTPPerPhone10Min,
 		OTPPerDay:   s.cfg.RateLimit.OTPPerPhoneDay,
 	})

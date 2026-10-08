@@ -14,6 +14,7 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		"version":       s.version,
 		"voice_enabled": s.voiceLive(),
 		"llm_enabled":   s.llmLive(),
+		"demo_mode":     s.cfg.DemoOTP != "",
 		"languages":     []string{"hi", "en", "ta"},
 	})
 }

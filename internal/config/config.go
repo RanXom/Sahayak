@@ -46,6 +46,10 @@ type Config struct {
 	MaxAudioSec int
 	MaxAudioMB  int
 
+	// DemoOTP, when non-empty, allows login with this fixed code and returns it
+	// in the OTP-request response. Intended for demos only.
+	DemoOTP string
+
 	AllowedOrigins []string
 
 	RateLimit RateLimitConfig
@@ -133,6 +137,7 @@ func Load() (*Config, error) {
 		FontDir:          getEnv("FONT_DIR", "./fonts"),
 		MaxAudioSec:      getEnvInt("MAX_AUDIO_SECONDS", 60),
 		MaxAudioMB:       getEnvInt("MAX_AUDIO_MB", 5),
+		DemoOTP:          getEnv("DEMO_OTP", ""),
 		AllowedOrigins:   splitCSV(getEnv("CORS_ALLOWED_ORIGINS", "")),
 		RateLimit: RateLimitConfig{
 			AnonPerMinute:        getEnvInt("RATE_ANON_PER_MIN", 30),
