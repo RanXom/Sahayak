@@ -7,6 +7,7 @@ import (
 
 	"github.com/sahayak/sahayak/internal/config"
 	"github.com/sahayak/sahayak/internal/db"
+	"github.com/sahayak/sahayak/internal/jobs"
 	"github.com/sahayak/sahayak/internal/obs"
 	"github.com/sahayak/sahayak/migrations"
 )
@@ -34,6 +35,9 @@ func run() error {
 	defer pool.Close()
 
 	if err := db.Migrate(ctx, pool, migrations.FS, migrations.Dir); err != nil {
+		return err
+	}
+	if err := jobs.Migrate(ctx, pool); err != nil {
 		return err
 	}
 	if err := db.Seed(ctx, pool, migrations.FS); err != nil {
