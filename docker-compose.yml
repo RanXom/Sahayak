@@ -1,0 +1,104 @@
+# Sahayak production stack (Coolify-compatible).
+#
+# Coolify reads this file when the Build Pack is "Docker Compose". Set the
+# domains per service in the Coolify UI:
+#   frontend -> https://YOUR_DOMAIN:3000
+#   api      -> https://YOUR_DOMAIN:8080/api   (then disable "Strip Prefixes")
+# Databases and internal services need no domain.
+#
+# Host ports are intentionally NOT published; Coolify's proxy reaches the
+# containers over the stack network. For local full-stack use, add a
+# docker-compose.override.yml with the port mappings you want.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sahayak}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sahayak}
+      POSTGRES_DB: ${POSTGRES_DB:-sahayak}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sahayak}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # One-shot: applies SQL + River migrations and idempotent seed data.
+  migrate:
+    image: sahayak-api:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    entrypoint: ["/app/seed"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-sahayak}:${POSTGRES_PASSWORD:-sahayak}@db:5432/${POSTGRES_DB:-sahayak}?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET:-dev-insecure-jwt-secret-change-me}
+      PHONE_HASH_PEPPER: ${PHONE_HASH_PEPPER:-dev-insecure-pepper-change-me}
+      ADMIN_PHONE: ${ADMIN_PHONE:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    image: sahayak-api:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      PORT: "8080"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SERVER_MODE: all
+      DATABASE_URL: postgres://${POSTGRES_USER:-sahayak}:${POSTGRES_PASSWORD:-sahayak}@db:5432/${POSTGRES_DB:-sahayak}?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      PHONE_HASH_PEPPER: ${PHONE_HASH_PEPPER:?PHONE_HASH_PEPPER is required}
+      DEMO_OTP: ${DEMO_OTP:-}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      VOICE_PROVIDER: ${VOICE_PROVIDER:-sarvam}
+      SARVAM_API_KEY: ${SARVAM_API_KEY:-}
+      BHASHINI_API_KEY: ${BHASHINI_API_KEY:-}
+      BHASHINI_USER_ID: ${BHASHINI_USER_ID:-}
+      LLM_PROVIDER: ${LLM_PROVIDER:-gemini}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      SMS_PROVIDER: ${SMS_PROVIDER:-msg91}
+      MSG91_AUTH_KEY: ${MSG91_AUTH_KEY:-}
+      MSG91_SENDER: ${MSG91_SENDER:-SAHAYK}
+      WHATSAPP_PROVIDER: ${WHATSAPP_PROVIDER:-gupshup}
+      WHATSAPP_API_KEY: ${WHATSAPP_API_KEY:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - app-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: /api/v1
+    environment:
+      PORT: "3000"
+      HOST: 0.0.0.0
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  app-data:
