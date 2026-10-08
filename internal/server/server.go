@@ -13,9 +13,12 @@ import (
 	"github.com/sahayak/sahayak/internal/auth"
 	"github.com/sahayak/sahayak/internal/config"
 	"github.com/sahayak/sahayak/internal/crypto"
+	"github.com/sahayak/sahayak/internal/domain"
 	"github.com/sahayak/sahayak/internal/location"
 	"github.com/sahayak/sahayak/internal/middleware"
 	"github.com/sahayak/sahayak/internal/profile"
+	"github.com/sahayak/sahayak/internal/scheme"
+	"github.com/sahayak/sahayak/internal/source"
 )
 
 // Version is the application version reported by /healthz.
@@ -36,6 +39,8 @@ type Server struct {
 
 	locationHandler *location.Handler
 	profileHandler  *profile.Handler
+	schemeHandler   *scheme.Handler
+	sourceHandler   *source.Handler
 
 	// Rate limiters
 	anonLimiter  *middleware.RateLimiter
@@ -99,6 +104,13 @@ func (s *Server) initModules() {
 	profileRepo := profile.NewRepository(s.pool)
 	profileSvc := profile.NewService(profileRepo, locationRepo)
 	s.profileHandler = profile.NewHandler(profileSvc)
+
+	schemeRepo := scheme.NewRepository(s.pool)
+	schemeSvc := scheme.NewService(schemeRepo)
+	s.schemeHandler = scheme.NewHandler(schemeSvc)
+
+	sourceRepo := source.NewRepository(s.pool)
+	s.sourceHandler = source.NewHandler(source.NewService(sourceRepo))
 }
 
 func (s *Server) buildRouter() {
@@ -136,6 +148,27 @@ func (s *Server) buildRouter() {
 			r.Patch("/profile/facts", s.profileHandler.MergeFacts)
 			r.Get("/profile/documents", s.profileHandler.GetDocuments)
 			r.Put("/profile/documents", s.profileHandler.UpdateDocuments)
+
+			r.Get("/schemes/{id}", s.schemeHandler.Get)
+		})
+
+		// Admin routes
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.Authenticate(s.tokens))
+			r.Use(middleware.RequireRole(domain.RoleAdmin))
+			r.Use(middleware.Limit(s.userLimiter, middleware.UserKey))
+
+			r.Get("/admin/schemes", s.schemeHandler.AdminList)
+			r.Post("/admin/schemes", s.schemeHandler.AdminCreate)
+			r.Put("/admin/schemes/{id}", s.schemeHandler.AdminUpdate)
+			r.Post("/admin/schemes/{id}/publish", s.schemeHandler.AdminPublish)
+			r.Post("/admin/schemes/{id}/archive", s.schemeHandler.AdminArchive)
+
+			r.Get("/admin/sources", s.sourceHandler.ListSources)
+			r.Post("/admin/sources", s.sourceHandler.CreateSource)
+			r.Get("/admin/candidates", s.sourceHandler.ListCandidates)
+			r.Post("/admin/candidates/{id}/accept", s.sourceHandler.AcceptCandidate)
+			r.Post("/admin/candidates/{id}/reject", s.sourceHandler.RejectCandidate)
 		})
 	})
 
