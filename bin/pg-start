@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Start the local development PostgreSQL server (idempotent).
+set -euo pipefail
+: "${PGDATA:?PGDATA is not set — enter the dev shell first (direnv allow / nix develop)}"
+
+if pg_ctl -D "$PGDATA" status >/dev/null 2>&1; then
+  echo "PostgreSQL is already running on port ${PGPORT:-55432}."
+  exit 0
+fi
+
+pg-init
+pg_ctl -D "$PGDATA" \
+  -o "-p ${PGPORT:-55432} -k $PGDATA -c listen_addresses='localhost'" \
+  -l "$PGDATA/pg.log" start

@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Create the application database if it does not exist (idempotent).
+set -euo pipefail
+: "${PGDATA:?PGDATA is not set — enter the dev shell first (direnv allow / nix develop)}"
+createdb -h "$PGDATA" -p "${PGPORT:-55432}" -U "${PGUSER:-sahayak}" "${PGDATABASE:-sahayak}" 2>/dev/null || true

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Initialize the local development PostgreSQL data directory (idempotent).
+set -euo pipefail
+: "${PGDATA:?PGDATA is not set — enter the dev shell first (direnv allow / nix develop)}"
+if [ ! -d "$PGDATA" ]; then
+  initdb -D "$PGDATA" -U "${PGUSER:-sahayak}" --auth=trust >/dev/null
+  echo "Initialized PostgreSQL data directory at $PGDATA"
+fi

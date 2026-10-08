@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Stop the local development PostgreSQL server.
+set -euo pipefail
+: "${PGDATA:?PGDATA is not set — enter the dev shell first (direnv allow / nix develop)}"
+pg_ctl -D "$PGDATA" stop -m fast
