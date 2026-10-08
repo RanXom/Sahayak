@@ -1,4 +1,5 @@
 import { sveltekit } from '@sveltejs/kit/vite';
+import { SvelteKitPWA } from '@vite-pwa/sveltekit';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
@@ -12,5 +13,38 @@ export default defineConfig({
 			}
 		}
 	},
-	plugins: [sveltekit()]
+	plugins: [
+		sveltekit(),
+		SvelteKitPWA({
+			registerType: 'autoUpdate',
+			strategies: 'generateSW',
+			manifest: {
+				name: 'Sahayak · सहायक',
+				short_name: 'Sahayak',
+				description: 'Discover government welfare schemes you are eligible for, by voice.',
+				start_url: '/',
+				display: 'standalone',
+				orientation: 'portrait',
+				background_color: '#F4F4F1',
+				theme_color: '#0E6E55',
+				lang: 'hi',
+				icons: [
+					{ src: '/icons/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+					{ src: '/icons/maskable.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' }
+				]
+			},
+			workbox: {
+				globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+				navigateFallback: '/',
+				runtimeCaching: [
+					{
+						urlPattern: ({ url }) => url.pathname.startsWith('/api/v1/locations'),
+						handler: 'StaleWhileRevalidate',
+						options: { cacheName: 'sahayak-locations' }
+					}
+				]
+			},
+			devOptions: { enabled: false }
+		})
+	]
 });
