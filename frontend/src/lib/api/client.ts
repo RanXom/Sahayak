@@ -120,6 +120,100 @@ export interface AppConfig {
 	demo_mode: boolean;
 	languages: string[];
 }
+
+export interface StateInfo {
+	id: number;
+	code: string;
+	name_en: string;
+	name_hi: string;
+	is_ut: boolean;
+	coverage: { level: string; scheme_count: number; note?: string };
+}
+
+export interface District {
+	id: number;
+	state_id: number;
+	name_en: string;
+	name_hi: string;
+}
+
+export interface ProfileDocument {
+	document_type: string;
+	has_document: boolean;
+}
+
+export interface ProfileView {
+	id: string;
+	state?: StateInfo;
+	district?: District;
+	facts: Record<string, unknown>;
+	documents: ProfileDocument[];
+	completed: boolean;
+	updated_at: string;
+}
+
+export interface RuleResult {
+	rule: string;
+	status: 'pass' | 'fail' | 'unknown' | 'error';
+	description_en?: string;
+	description_hi?: string;
+	missing_fields?: string[];
+}
+
+export interface DocumentStatus {
+	type: string;
+	name: string;
+	mandatory: boolean;
+	user_has: boolean;
+	status: string;
+	acquisition?: {
+		issuing_authority?: string;
+		steps?: string;
+		typical_time?: string;
+		typical_fee?: string;
+		source_url?: string;
+		nearest_offices?: Array<{ name: string; address?: string }>;
+	};
+}
+
+export interface Scheme {
+	id: string;
+	slug: string;
+	name_en: string;
+	name_hi: string;
+	description_en?: string;
+	description_hi?: string;
+	benefit_type: string;
+	benefit_amount?: string;
+	scope: string;
+	ministry?: string;
+	official_url?: string;
+	application_url?: string;
+	deadline?: string | null;
+	verified_at?: string | null;
+}
+
+export interface EligibilityResult {
+	scheme: Scheme;
+	status: 'eligible' | 'potentially_eligible' | 'not_eligible';
+	match_score: number;
+	rule_results: RuleResult[];
+	missing_fields?: string[];
+	explanation: string;
+	documents?: {
+		documents: DocumentStatus[];
+		missing_count: number;
+		all_present: boolean;
+	};
+}
+
+export interface EligibilityResponse {
+	evaluated_at: string;
+	profile_completeness: number;
+	coverage_note: string;
+	results: EligibilityResult[];
+	summary: Record<string, number>;
+}
 export const api = {
 	// Config / capabilities
 	getConfig: () => request<AppConfig>('/config'),
@@ -141,7 +235,40 @@ export const api = {
 	me: () => request<User>('/auth/me'),
 	logout: () =>
 		request<{ status: string }>('/auth/logout', { method: 'POST', body: JSON.stringify({}) }),
+
+	// Locations
+	states: () => request<{ states: StateInfo[] }>('/locations/states'),
+	districts: (stateId: number) =>
+		request<{ districts: District[] }>(`/locations/states/${stateId}/districts`),
+
+	// Profile
+	getProfile: () => request<ProfileView>('/profile'),
+	updateProfile: (payload: { state_id?: number; district_id?: number; facts: Record<string, unknown> }) =>
+		request<ProfileView>('/profile', { method: 'PUT', body: JSON.stringify(payload) }),
+	mergeFacts: (facts: Record<string, unknown>, state_id?: number, district_id?: number) =>
+		request<ProfileView>('/profile/facts', {
+			method: 'PATCH',
+			body: JSON.stringify({ facts, state_id, district_id })
+		}),
+	getDocuments: () =>
+		request<{ documents: ProfileDocument[] }>('/profile/documents'),
+	updateDocuments: (documents: ProfileDocument[]) =>
+		request<{ documents: ProfileDocument[] }>('/profile/documents', {
+			method: 'PUT',
+			body: JSON.stringify({ documents })
+		}),
+
+	// Eligibility
+	evaluate: (lang = 'hi') =>
+		request<EligibilityResponse>('/eligibility/evaluate', { method: 'POST', body: JSON.stringify({}) }, lang),
+	scheme: (id: string) => request<Scheme>(`/schemes/${id}`),
+	schemeDocuments: (id: string) =>
+		request<{ scheme_id: string; documents: DocumentStatus[]; missing_count: number; all_present: boolean }>(
+			`/schemes/${id}/documents`
+		),
+	documentTypes: () => request<{ document_types: unknown[] }>('/documents/types'),
 };
+
 export function apiBase(): string {
 	return API_BASE;
 }
