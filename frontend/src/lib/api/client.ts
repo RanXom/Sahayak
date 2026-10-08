@@ -103,6 +103,7 @@ async function request<T>(
 	const text = await res.text();
 	return text ? (JSON.parse(text) as T) : (undefined as T);
 }
+
 // ---- Domain types (mirrors the backend API) ----
 
 export interface User {
@@ -214,6 +215,43 @@ export interface EligibilityResponse {
 	results: EligibilityResult[];
 	summary: Record<string, number>;
 }
+
+export interface TurnResult {
+	conversation_id: string;
+	transcript: string;
+	detected_language: string;
+	response_text: string;
+	response_audio_url?: string;
+	facts_extracted: Record<string, unknown>;
+	profile_snapshot: Record<string, unknown>;
+	follow_up?: { question_about: string; is_last_question: boolean };
+	ready_for_review: boolean;
+	turn_count: number;
+}
+
+export interface FormFieldView {
+	name: string;
+	label: string;
+	type: string;
+	required: boolean;
+	value?: unknown;
+	auto_filled: boolean;
+	options?: unknown;
+}
+
+export interface ApplicationView {
+	application: {
+		id: string;
+		status: string;
+		has_pdf: boolean;
+		form_data: Record<string, unknown>;
+	};
+	scheme: Scheme;
+	form_fields: FormFieldView[];
+	auto_filled: Record<string, unknown>;
+	missing_fields: string[];
+}
+
 export const api = {
 	// Config / capabilities
 	getConfig: () => request<AppConfig>('/config'),
@@ -258,6 +296,25 @@ export const api = {
 			body: JSON.stringify({ documents })
 		}),
 
+	// Conversation
+	startConversation: (lang = 'hi') =>
+		request<{ id: string; messages: Array<{ role: string; content_text: string }> }>(
+			'/conversations',
+			{ method: 'POST', body: JSON.stringify({}) },
+			lang
+		),
+	sendMessage: (id: string, text: string, language: string) =>
+		request<TurnResult>(`/conversations/${id}/message`, {
+			method: 'POST',
+			body: JSON.stringify({ text, language })
+		}),
+	sendVoice: (id: string, audio: Blob, language: string) => {
+		const form = new FormData();
+		form.append('audio', audio, 'audio.webm');
+		form.append('language', language);
+		return request<TurnResult>(`/conversations/${id}/voice`, { method: 'POST', body: form });
+	},
+
 	// Eligibility
 	evaluate: (lang = 'hi') =>
 		request<EligibilityResponse>('/eligibility/evaluate', { method: 'POST', body: JSON.stringify({}) }, lang),
@@ -267,6 +324,44 @@ export const api = {
 			`/schemes/${id}/documents`
 		),
 	documentTypes: () => request<{ document_types: unknown[] }>('/documents/types'),
+
+	// Applications
+	createApplication: (scheme_id: string) =>
+		request<ApplicationView>('/applications', {
+			method: 'POST',
+			body: JSON.stringify({ scheme_id })
+		}),
+	getApplication: (id: string) => request<ApplicationView>(`/applications/${id}`),
+	listApplications: () =>
+		request<{ applications: Array<{ id: string; scheme_id: string; status: string; has_pdf: boolean }> }>(
+			'/applications'
+		),
+	updateApplicationForm: (id: string, form_data: Record<string, unknown>) =>
+		request<{ id: string; status: string }>(`/applications/${id}/form`, {
+			method: 'PUT',
+			body: JSON.stringify({ form_data })
+		}),
+	generatePdf: (id: string) =>
+		request<{ id: string; status: string; has_pdf: boolean }>(`/applications/${id}/pdf`, {
+			method: 'POST'
+		}),
+	recordSubmission: (id: string, submission_ref: string) =>
+		request<unknown>(`/applications/${id}/submit`, {
+			method: 'POST',
+			body: JSON.stringify({ submission_ref })
+		}),
+
+	// Notifications
+	getPreferences: () =>
+		request<{ preferences: Array<{ channel: string; enabled: boolean }> }>(
+			'/notifications/preferences'
+		),
+	updatePreferences: (channel: string, enabled: boolean) =>
+		request<{ preferences: Array<{ channel: string; enabled: boolean }> }>(
+			'/notifications/preferences',
+			{ method: 'PUT', body: JSON.stringify({ channel, enabled }) }
+		),
+	listNotifications: () => request<{ notifications: unknown[] }>('/notifications')
 };
 
 export function apiBase(): string {
