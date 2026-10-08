@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -75,12 +76,20 @@ func (l *RateLimiter) get(key string) *bucket {
 	return b
 }
 
-// Allow reports whether a request for key may proceed.
-func (l *RateLimiter) Allow(key string) bool {
+// Allow reports whether a request for key may proceed and sets headers.
+func (l *RateLimiter) Allow(w http.ResponseWriter, key string) bool {
 	b := l.get(key)
-	if !(b.minute.Allow() && b.hour.Allow()) {
+	w.Header().Set("X-RateLimit-Limit", strconv.Itoa(l.cfg.PerMinute))
+	if !b.minute.Allow() || !b.hour.Allow() {
+		w.Header().Set("X-RateLimit-Remaining", "0")
+		w.Header().Set("X-RateLimit-Reset", strconv.Itoa(60))
 		return false
 	}
+	remaining := int(b.minute.Tokens())
+	if remaining < 0 {
+		remaining = 0
+	}
+	w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(remaining))
 	return true
 }
 
@@ -107,7 +116,7 @@ func UserKey(r *http.Request) string {
 func Limit(l *RateLimiter, keyFn KeyFunc) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !l.Allow(keyFn(r)) {
+			if !l.Allow(w, keyFn(r)) {
 				httpx.WriteError(w, domain.RateLimited("Too many requests. Please slow down and try again shortly."))
 				return
 			}
