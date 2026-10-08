@@ -5,8 +5,18 @@
 *.exe
 
 # Data and secrets
+/data/
 .env
 *.local
+
+# Coverage
+coverage.out
+
+# Frontend
+/frontend/node_modules/
+/frontend/.svelte-kit/
+/frontend/build/
+/frontend/.env
 
 # Editors / OS
 .DS_Store
