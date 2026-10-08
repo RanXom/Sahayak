@@ -119,6 +119,7 @@ export interface AppConfig {
 	voice_enabled: boolean;
 	llm_enabled: boolean;
 	demo_mode: boolean;
+	firebase_auth?: boolean;
 	languages: string[];
 }
 
@@ -269,6 +270,11 @@ export const api = {
 		request<{ access_token: string; refresh_token: string; expires_in: number; user: User }>(
 			'/auth/otp/verify',
 			{ method: 'POST', body: JSON.stringify({ challenge_id, otp }) }
+		),
+	firebaseLogin: (id_token: string) =>
+		request<{ access_token: string; refresh_token: string; expires_in: number; user: User }>(
+			'/auth/firebase',
+			{ method: 'POST', body: JSON.stringify({ id_token }) }
 		),
 	me: () => request<User>('/auth/me'),
 	logout: () =>

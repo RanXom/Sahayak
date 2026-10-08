@@ -1,6 +1,10 @@
 package server
 
 import (
+	"context"
+	"os"
+
+	"github.com/sahayak/sahayak/internal/auth"
 	"github.com/sahayak/sahayak/internal/platform/llm"
 	"github.com/sahayak/sahayak/internal/platform/sms"
 	"github.com/sahayak/sahayak/internal/platform/translate"
@@ -121,6 +125,34 @@ func (s *Server) voiceProviders() (voice.STTProvider, voice.TTSProvider) {
 // voiceLive reports whether at least one voice provider is configured.
 func (s *Server) voiceLive() bool {
 	return s.cfg.SarvamAPIKey != "" || s.cfg.Bhashini.APIKey != ""
+}
+
+// firebaseVerifier builds the Firebase ID-token verifier, or nil when
+// Firebase phone auth is not configured.
+func (s *Server) firebaseVerifier() auth.TokenVerifier {
+	if s.cfg.FirebaseProjectID == "" {
+		return nil
+	}
+	creds := []byte(s.cfg.FirebaseCredentials)
+	if len(creds) == 0 && s.cfg.FirebaseCredentialsFile != "" {
+		b, err := os.ReadFile(s.cfg.FirebaseCredentialsFile)
+		if err != nil {
+			s.logger.Error("firebase_credentials_read_failed", "error", err.Error())
+			return nil
+		}
+		creds = b
+	}
+	v, err := auth.NewFirebaseVerifier(context.Background(), s.cfg.FirebaseProjectID, creds)
+	if err != nil {
+		s.logger.Error("firebase_init_failed", "error", err.Error())
+		return nil
+	}
+	return v
+}
+
+// firebaseLive reports whether Firebase phone auth is configured.
+func (s *Server) firebaseLive() bool {
+	return s.cfg.FirebaseProjectID != ""
 }
 
 // translateProvider returns the configured translator, defaulting to passthrough.

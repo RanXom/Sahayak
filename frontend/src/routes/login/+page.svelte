@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { onMount } from 'svelte';
 	import { api, ApiError } from '$lib/api/client';
-	import { login } from '$lib/stores/auth';
+	import { login, loginWithFirebase } from '$lib/stores/auth';
+	import { confirmFirebaseOtp, firebaseEnabled, sendFirebaseOtp } from '$lib/firebase';
 	import { language, translate, type Lang } from '$lib/i18n';
 	import Icon from '$lib/components/Icon.svelte';
 
@@ -18,16 +20,42 @@
 	let error = $state('');
 	let busy = $state(false);
 	let demoOtp = $state('');
+	// Login method: Firebase SMS when both sides support it, else server OTP.
+	let method = $state<'firebase' | 'server'>('server');
+	let firebaseOffered = $state(false);
+
+	onMount(async () => {
+		try {
+			const cfg = await api.getConfig();
+			firebaseOffered = !!cfg.firebase_auth && firebaseEnabled;
+			if (firebaseOffered) method = 'firebase';
+		} catch {
+			firebaseOffered = false;
+		}
+	});
+
+	function switchMethod(m: 'firebase' | 'server') {
+		method = m;
+		step = 'phone';
+		otp = '';
+		challengeId = '';
+		demoOtp = '';
+		error = '';
+	}
 
 	async function requestOtp() {
 		error = '';
 		busy = true;
 		try {
-			const res = await api.requestOtp(phone.trim());
-			challengeId = res.challenge_id;
-			if (res.demo_otp) {
-				demoOtp = res.demo_otp;
-				otp = res.demo_otp;
+			if (method === 'firebase') {
+				await sendFirebaseOtp(phone.trim(), 'recaptcha-container');
+			} else {
+				const res = await api.requestOtp(phone.trim());
+				challengeId = res.challenge_id;
+				if (res.demo_otp) {
+					demoOtp = res.demo_otp;
+					otp = res.demo_otp;
+				}
 			}
 			step = 'otp';
 		} catch (e) {
@@ -41,7 +69,12 @@
 		error = '';
 		busy = true;
 		try {
-			await login(challengeId, otp.trim());
+			if (method === 'firebase') {
+				const idToken = await confirmFirebaseOtp(otp.trim());
+				await loginWithFirebase(idToken);
+			} else {
+				await login(challengeId, otp.trim());
+			}
 			goto('/');
 		} catch (e) {
 			error = e instanceof ApiError ? e.message : 'Verification failed';
@@ -58,6 +91,28 @@
 	<p class="muted" style="margin-top:8px">{t('tagline')}</p>
 
 	{#if error}<div class="banner" style="margin-top:20px">{error}</div>{/if}
+
+	{#if firebaseOffered}
+		<div class="methods" role="tablist">
+			<button
+				type="button"
+				class="method"
+				class:active={method === 'firebase'}
+				onclick={() => switchMethod('firebase')}
+			>
+				{t('login_firebase')}
+			</button>
+			<button
+				type="button"
+				class="method"
+				class:active={method === 'server'}
+				onclick={() => switchMethod('server')}
+			>
+				{t('login_server_code')}
+			</button>
+		</div>
+	{/if}
+	<div id="recaptcha-container"></div>
 
 	{#if step === 'phone'}
 		<form onsubmit={(e) => (e.preventDefault(), requestOtp())}>
@@ -140,5 +195,25 @@
 		letter-spacing: 0.4em;
 		font-size: var(--step-2);
 		text-align: center;
+	}
+	.methods {
+		display: flex;
+		gap: 8px;
+		margin-top: 20px;
+	}
+	.method {
+		flex: 1;
+		padding: 10px;
+		border-radius: var(--r-md);
+		border: 1px solid var(--line);
+		background: transparent;
+		color: var(--ink-2);
+		font-size: var(--step--1);
+		font-weight: 600;
+	}
+	.method.active {
+		background: var(--accent-soft);
+		color: var(--accent-strong);
+		border-color: transparent;
 	}
 </style>

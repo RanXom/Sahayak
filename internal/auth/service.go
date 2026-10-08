@@ -19,6 +19,7 @@ type Service struct {
 	repo        *Repository
 	tokens      *TokenManager
 	sms         sms.Provider
+	firebase    TokenVerifier
 	audit       audit.Logger
 	cipher      *crypto.Cipher
 	pepper      string
@@ -32,6 +33,7 @@ type Deps struct {
 	Repo        *Repository
 	Tokens      *TokenManager
 	SMS         sms.Provider
+	Firebase    TokenVerifier
 	Audit       audit.Logger
 	Cipher      *crypto.Cipher
 	Pepper      string
@@ -46,6 +48,7 @@ func NewService(d Deps) *Service {
 		repo:        d.Repo,
 		tokens:      d.Tokens,
 		sms:         d.SMS,
+		firebase:    d.Firebase,
 		audit:       d.Audit,
 		cipher:      d.Cipher,
 		pepper:      d.Pepper,
@@ -175,17 +178,32 @@ func (s *Service) VerifyOTP(ctx context.Context, challengeID, otp, ip, ua string
 		return nil, domain.Internal("Could not complete verification", err)
 	}
 
-	user, err := s.repo.FindUserByPhoneHash(ctx, challenge.PhoneHash)
+	user, err := s.findOrCreateUser(ctx, challenge.PhoneHash, challenge.PhoneLast4, challenge.PhoneEncrypted)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.finishLogin(ctx, user, "auth.login", ip, ua)
+}
+
+// findOrCreateUser returns the user for the phone hash, creating a citizen
+// account on first login.
+func (s *Service) findOrCreateUser(ctx context.Context, phoneHash, phoneLast4, phoneEncrypted string) (*domain.User, error) {
+	user, err := s.repo.FindUserByPhoneHash(ctx, phoneHash)
 	if err != nil {
 		if !errors.Is(err, ErrNotFound) {
 			return nil, domain.Internal("Could not look up user", err)
 		}
-		user, err = s.repo.CreateUser(ctx, challenge.PhoneHash, challenge.PhoneLast4, challenge.PhoneEncrypted, "hi", domain.RoleCitizen)
+		user, err = s.repo.CreateUser(ctx, phoneHash, phoneLast4, phoneEncrypted, "hi", domain.RoleCitizen)
 		if err != nil {
 			return nil, domain.Internal("Could not create user", err)
 		}
 	}
+	return user, nil
+}
 
+// finishLogin touches last login, issues our own tokens and audits the login.
+func (s *Service) finishLogin(ctx context.Context, user *domain.User, action, ip, ua string) (*AuthResult, error) {
 	if err := s.repo.TouchLastLogin(ctx, user.ID); err != nil {
 		return nil, domain.Internal("Could not update login", err)
 	}
@@ -197,13 +215,43 @@ func (s *Service) VerifyOTP(ctx context.Context, challengeID, otp, ip, ua string
 	s.audit.Log(ctx, audit.Entry{
 		ActorID:      &user.ID,
 		ActorRole:    user.Role,
-		Action:       "auth.login",
+		Action:       action,
 		ResourceType: "user",
 		ResourceID:   user.ID,
 		IPAddress:    ip,
 		UserAgent:    ua,
 	})
 	return result, nil
+}
+
+// LoginWithFirebase exchanges a verified Firebase ID token for our own session
+// tokens. The phone number comes from the verified phone_number claim, so no
+// SMS is sent by us — Firebase delivered the OTP.
+func (s *Service) LoginWithFirebase(ctx context.Context, idToken, ip, ua string) (*AuthResult, error) {
+	if s.firebase == nil {
+		return nil, domain.Unavailable("Firebase login is not configured")
+	}
+	phone, _, err := s.firebase.VerifyIDToken(ctx, idToken)
+	if err != nil {
+		s.audit.Log(ctx, audit.Entry{Action: "auth.firebase.failed", ResourceType: "user", IPAddress: ip, UserAgent: ua})
+		return nil, domain.Unauthorized("Invalid login token")
+	}
+	normalized, err := NormalizePhone(phone)
+	if err != nil {
+		return nil, domain.InvalidInput("Invalid phone number in login token")
+	}
+	phoneHash := HashPhone(normalized, s.pepper)
+	encPhone := ""
+	if s.cipher != nil {
+		if enc, err := s.cipher.Encrypt(normalized); err == nil {
+			encPhone = enc
+		}
+	}
+	user, err := s.findOrCreateUser(ctx, phoneHash, Last4(normalized), encPhone)
+	if err != nil {
+		return nil, err
+	}
+	return s.finishLogin(ctx, user, "auth.firebase.login", ip, ua)
 }
 
 // Refresh rotates a refresh token and issues a new token pair.

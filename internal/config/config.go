@@ -36,6 +36,14 @@ type Config struct {
 	MSG91AuthKey string
 	MSG91Sender  string
 
+	// Firebase phone auth. When FirebaseProjectID is set, the backend accepts
+	// POST /auth/firebase with a Firebase ID token and verifies it with the
+	// Admin SDK. Credentials come from FIREBASE_CREDENTIALS_JSON (raw JSON) or
+	// FIREBASE_CREDENTIALS_FILE (path); otherwise ADC is used.
+	FirebaseProjectID       string
+	FirebaseCredentials     string
+	FirebaseCredentialsFile string
+
 	WhatsAppProvider string
 	WhatsAppAPIKey   string
 
@@ -133,21 +141,25 @@ func Load() (*Config, error) {
 			Model:   getEnv("OPENAI_MODEL", "gpt-4o-mini"),
 			BaseURL: getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
 		},
-		SMSProvider:      strings.ToLower(getEnv("SMS_PROVIDER", "msg91")),
-		MSG91AuthKey:     getEnv("MSG91_AUTH_KEY", ""),
-		MSG91Sender:      getEnv("MSG91_SENDER", "SAHAYK"),
-		WhatsAppProvider: strings.ToLower(getEnv("WHATSAPP_PROVIDER", "gupshup")),
-		WhatsAppAPIKey:   getEnv("WHATSAPP_API_KEY", ""),
-		ServerMode:       strings.ToLower(getEnv("SERVER_MODE", "all")),
-		DataDir:          getEnv("DATA_DIR", "./data"),
-		PDFDir:           getEnv("PDF_DIR", "./data/pdfs"),
-		FontDir:          getEnv("FONT_DIR", "./fonts"),
-		MaxAudioSec:      getEnvInt("MAX_AUDIO_SECONDS", 60),
-		MaxAudioMB:       getEnvInt("MAX_AUDIO_MB", 5),
-		HTTPReadTimeout:  time.Duration(getEnvInt("HTTP_READ_TIMEOUT_SEC", 60)) * time.Second,
-		HTTPWriteTimeout: time.Duration(getEnvInt("HTTP_WRITE_TIMEOUT_SEC", 240)) * time.Second,
-		DemoOTP:          getEnv("DEMO_OTP", ""),
-		AllowedOrigins:   splitCSV(getEnv("CORS_ALLOWED_ORIGINS", "")),
+		SMSProvider:  strings.ToLower(getEnv("SMS_PROVIDER", "msg91")),
+		MSG91AuthKey: getEnv("MSG91_AUTH_KEY", ""),
+		MSG91Sender:  getEnv("MSG91_SENDER", "SAHAYK"),
+
+		FirebaseProjectID:       getEnv("FIREBASE_PROJECT_ID", ""),
+		FirebaseCredentials:     getEnv("FIREBASE_CREDENTIALS_JSON", ""),
+		FirebaseCredentialsFile: getEnv("FIREBASE_CREDENTIALS_FILE", ""),
+		WhatsAppProvider:        strings.ToLower(getEnv("WHATSAPP_PROVIDER", "gupshup")),
+		WhatsAppAPIKey:          getEnv("WHATSAPP_API_KEY", ""),
+		ServerMode:              strings.ToLower(getEnv("SERVER_MODE", "all")),
+		DataDir:                 getEnv("DATA_DIR", "./data"),
+		PDFDir:                  getEnv("PDF_DIR", "./data/pdfs"),
+		FontDir:                 getEnv("FONT_DIR", "./fonts"),
+		MaxAudioSec:             getEnvInt("MAX_AUDIO_SECONDS", 60),
+		MaxAudioMB:              getEnvInt("MAX_AUDIO_MB", 5),
+		HTTPReadTimeout:         time.Duration(getEnvInt("HTTP_READ_TIMEOUT_SEC", 60)) * time.Second,
+		HTTPWriteTimeout:        time.Duration(getEnvInt("HTTP_WRITE_TIMEOUT_SEC", 240)) * time.Second,
+		DemoOTP:                 getEnv("DEMO_OTP", ""),
+		AllowedOrigins:          splitCSV(getEnv("CORS_ALLOWED_ORIGINS", "")),
 		RateLimit: RateLimitConfig{
 			AnonPerMinute:        getEnvInt("RATE_ANON_PER_MIN", 30),
 			AnonPerHour:          getEnvInt("RATE_ANON_PER_HOUR", 200),

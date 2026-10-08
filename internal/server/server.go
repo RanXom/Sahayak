@@ -127,6 +127,7 @@ func (s *Server) initModules() {
 		Repo:        authRepo,
 		Tokens:      s.tokens,
 		SMS:         s.smsProvider(),
+		Firebase:    s.firebaseVerifier(),
 		Audit:       auditLogger,
 		Cipher:      cipher,
 		Pepper:      s.cfg.PhoneHashPepper,
@@ -285,6 +286,7 @@ func (s *Server) buildRouter() {
 			r.Use(middleware.Limit(s.anonLimiter, middleware.IPKey))
 			r.Post("/auth/otp/request", s.authHandler.RequestOTP)
 			r.Post("/auth/otp/verify", s.authHandler.VerifyOTP)
+			r.Post("/auth/firebase", s.authHandler.FirebaseLogin)
 			r.Post("/auth/refresh", s.authHandler.Refresh)
 			r.Get("/config", s.handleConfig)
 			r.Get("/locations/states", s.locationHandler.ListStates)

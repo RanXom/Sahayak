@@ -58,6 +58,29 @@ func (h *Handler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, res)
 }
 
+type firebaseLoginBody struct {
+	IDToken string `json:"id_token"`
+}
+
+// FirebaseLogin handles POST /auth/firebase.
+func (h *Handler) FirebaseLogin(w http.ResponseWriter, r *http.Request) {
+	var body firebaseLoginBody
+	if err := httpx.DecodeJSON(w, r, &body); err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	if body.IDToken == "" {
+		httpx.WriteError(w, domain.InvalidInput("id_token is required"))
+		return
+	}
+	res, err := h.svc.LoginWithFirebase(r.Context(), body.IDToken, clientIP(r), r.UserAgent())
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, res)
+}
+
 type refreshBody struct {
 	RefreshToken string `json:"refresh_token"`
 }
