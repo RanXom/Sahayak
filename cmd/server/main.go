@@ -42,6 +42,14 @@ func run() error {
 
 	srv := server.New(cfg, logger, pool)
 
+	if cfg.ServerMode == "all" || cfg.ServerMode == "worker" {
+		if err := srv.StartWorkers(ctx); err != nil {
+			logger.Error("workers_start_failed", "error", err)
+		} else {
+			logger.Info("workers_started")
+		}
+	}
+
 	httpServer := &http.Server{
 		Addr:              ":" + itoa(cfg.Port),
 		Handler:           srv.Handler(),
@@ -68,6 +76,9 @@ func run() error {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
+	if err := srv.StopWorkers(shutdownCtx); err != nil {
+		logger.Error("workers_stop_error", "error", err)
+	}
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		logger.Error("shutdown_error", "error", err)
 	}

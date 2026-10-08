@@ -5,6 +5,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -20,7 +21,9 @@ import (
 	"github.com/sahayak/sahayak/internal/domain"
 	"github.com/sahayak/sahayak/internal/eligibility"
 	"github.com/sahayak/sahayak/internal/helper"
+	"github.com/sahayak/sahayak/internal/jobs"
 	"github.com/sahayak/sahayak/internal/location"
+	"github.com/sahayak/sahayak/internal/maintenance"
 	"github.com/sahayak/sahayak/internal/middleware"
 	"github.com/sahayak/sahayak/internal/notification"
 	"github.com/sahayak/sahayak/internal/profile"
@@ -38,7 +41,8 @@ type Server struct {
 	pool    *pgxpool.Pool
 	version string
 
-	startedAt time.Time
+	startedAt    time.Time
+	riverStarted atomic.Bool
 
 	tokens      *auth.TokenManager
 	authService *auth.Service
@@ -56,6 +60,8 @@ type Server struct {
 	notificationSvc     *notification.Service
 	helperHandler       *helper.Handler
 	helperSvc           *helper.Service
+	maintenance         *maintenance.Service
+	jobsClient          *jobs.Client
 	audioStore          *conversation.FileAudioStore
 
 	// Rate limiters
@@ -78,12 +84,16 @@ func New(cfg *config.Config, logger *slog.Logger, pool *pgxpool.Pool) *Server {
 	s.tokens = auth.NewTokenManager(cfg.JWTSecret, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
 	s.initRateLimiters()
 	s.initModules()
+	s.initJobs()
 	s.buildRouter()
 	return s
 }
 
 // Handler returns the configured HTTP handler.
 func (s *Server) Handler() http.Handler { return s.router }
+
+// Tokens exposes the token manager (used by the worker/other components).
+func (s *Server) Tokens() *auth.TokenManager { return s.tokens }
 
 func (s *Server) initRateLimiters() {
 	rl := s.cfg.RateLimit
@@ -188,6 +198,54 @@ func (s *Server) initModules() {
 	helperRepo := helper.NewRepository(s.pool)
 	s.helperSvc = helper.NewService(helperRepo, auditLogger, s.cfg.RateLimit.HelperSessionsPerDay)
 	s.helperHandler = helper.NewHandler(s.helperSvc)
+
+	s.maintenance = maintenance.New(s.pool, schemeRepo, s.logger, s.cfg.DataDir+"/audio", s.cfg.PDFDir)
+}
+
+// initJobs wires the River client when running in worker or all mode.
+func (s *Server) initJobs() {
+	if s.cfg.ServerMode == "api" {
+		return
+	}
+	handlers := jobs.Handlers{
+		Notification: func(ctx context.Context, args jobs.NotificationArgs) error {
+			return s.notificationSvc.Dispatch(ctx, args.NotificationID)
+		},
+		StatusCheck: func(context.Context, jobs.StatusCheckArgs) error { return nil },
+		LinkCheck: func(ctx context.Context, _ jobs.LinkCheckArgs) error {
+			return s.maintenance.LinkCheck(ctx)
+		},
+		DataRetention: func(ctx context.Context, _ jobs.DataRetentionArgs) error {
+			return s.maintenance.DataRetention(ctx)
+		},
+	}
+	client, err := jobs.NewClient(s.pool, handlers)
+	if err != nil {
+		s.logger.Error("jobs_client_init_failed", "error", err)
+		return
+	}
+	s.jobsClient = client
+	s.notificationSvc.SetEnqueuer(client)
+}
+
+// StartWorkers starts the background job workers.
+func (s *Server) StartWorkers(ctx context.Context) error {
+	if s.jobsClient == nil {
+		return nil
+	}
+	if err := s.jobsClient.Start(ctx); err != nil {
+		return err
+	}
+	s.riverStarted.Store(true)
+	return nil
+}
+
+// StopWorkers gracefully stops the background job workers.
+func (s *Server) StopWorkers(ctx context.Context) error {
+	if s.jobsClient == nil {
+		return nil
+	}
+	return s.jobsClient.Stop(ctx)
 }
 
 // NotificationService exposes the notification service (used by other modules).
