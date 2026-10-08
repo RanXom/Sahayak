@@ -1,7 +1,10 @@
 package server
 
 import (
+	"github.com/sahayak/sahayak/internal/platform/llm"
 	"github.com/sahayak/sahayak/internal/platform/sms"
+	"github.com/sahayak/sahayak/internal/platform/translate"
+	"github.com/sahayak/sahayak/internal/platform/voice"
 	"github.com/sahayak/sahayak/internal/platform/whatsapp"
 )
 
@@ -15,6 +18,114 @@ func (s *Server) smsProvider() sms.Provider {
 		}
 	}
 	return sms.NewConsoleProvider(s.logger)
+}
+
+// geminiProvider returns a Gemini provider or nil when no key is set.
+func (s *Server) geminiProvider() llm.Provider {
+	if s.cfg.Gemini.APIKey == "" {
+		return nil
+	}
+	return llm.NewGeminiProvider(s.cfg.Gemini.APIKey, s.cfg.Gemini.Model, s.cfg.Gemini.BaseURL)
+}
+
+// openAIProvider returns an OpenAI-compatible provider or nil when no key is set.
+func (s *Server) openAIProvider() llm.Provider {
+	if s.cfg.OpenAI.APIKey == "" {
+		return nil
+	}
+	return llm.NewOpenAIProvider(s.cfg.OpenAI.APIKey, s.cfg.OpenAI.Model, s.cfg.OpenAI.BaseURL)
+}
+
+// llmProvider builds a failover chain: the configured provider first, the other
+// paid provider second, and a deterministic fallback last. A single provider
+// outage therefore degrades rather than breaks.
+func (s *Server) llmProvider() llm.Provider {
+	gemini := s.geminiProvider()
+	openai := s.openAIProvider()
+
+	var primary, secondary llm.Provider
+	if s.cfg.LLMProvider == "openai" {
+		primary, secondary = openai, gemini
+	} else {
+		primary, secondary = gemini, openai
+	}
+
+	var chain []llm.Provider
+	if primary != nil {
+		chain = append(chain, primary)
+	}
+	if secondary != nil {
+		chain = append(chain, secondary)
+	}
+	chain = append(chain, llm.NewFallbackProvider())
+
+	if len(chain) == 1 {
+		return chain[0]
+	}
+	return llm.NewChain(chain...)
+}
+
+// llmLive reports whether at least one real LLM provider is configured.
+func (s *Server) llmLive() bool {
+	return s.cfg.Gemini.APIKey != "" || s.cfg.OpenAI.APIKey != ""
+}
+
+// voiceProviders builds STT/TTS failover chains from the configured providers.
+func (s *Server) voiceProviders() (voice.STTProvider, voice.TTSProvider) {
+	type bundle struct {
+		stt voice.STTProvider
+		tts voice.TTSProvider
+	}
+	sarvam := bundle{}
+	if s.cfg.SarvamAPIKey != "" {
+		p := voice.NewSarvamProvider(s.cfg.SarvamAPIKey, s.cfg.Sarvam.STTModel, s.cfg.Sarvam.TTSModel, s.cfg.Sarvam.Speaker)
+		sarvam = bundle{stt: p, tts: p}
+	}
+	bhashini := bundle{}
+	if s.cfg.Bhashini.APIKey != "" {
+		p := voice.NewBhashiniProvider(s.cfg.Bhashini.APIKey, s.cfg.Bhashini.UserID, s.cfg.Bhashini.BaseURL)
+		bhashini = bundle{stt: p, tts: p}
+	}
+
+	ordered := []bundle{}
+	first, second := sarvam, bhashini
+	if s.cfg.VoiceProvider == "bhashini" {
+		first, second = bhashini, sarvam
+	}
+	if first.stt != nil {
+		ordered = append(ordered, first)
+	}
+	if second.stt != nil {
+		ordered = append(ordered, second)
+	}
+	if len(ordered) == 0 {
+		s.logger.Warn("voice_provider_disabled", "reason", "no voice API key configured", "provider", s.cfg.VoiceProvider)
+		return nil, nil
+	}
+	if len(ordered) == 1 {
+		return ordered[0].stt, ordered[0].tts
+	}
+
+	stts := make([]voice.STTProvider, 0, len(ordered))
+	ttss := make([]voice.TTSProvider, 0, len(ordered))
+	for _, b := range ordered {
+		stts = append(stts, b.stt)
+		ttss = append(ttss, b.tts)
+	}
+	return voice.NewChainSTT(stts...), voice.NewChainTTS(ttss...)
+}
+
+// voiceLive reports whether at least one voice provider is configured.
+func (s *Server) voiceLive() bool {
+	return s.cfg.SarvamAPIKey != "" || s.cfg.Bhashini.APIKey != ""
+}
+
+// translateProvider returns the configured translator, defaulting to passthrough.
+func (s *Server) translateProvider() translate.Provider {
+	if s.cfg.VoiceProvider == "bhashini" && s.cfg.Bhashini.APIKey != "" {
+		return translate.NewBhashiniNMT(s.cfg.Bhashini.APIKey, s.cfg.Bhashini.UserID, s.cfg.Bhashini.BaseURL, "")
+	}
+	return translate.NewFallback()
 }
 
 // whatsappProvider selects the configured WhatsApp provider, falling back to a
