@@ -1,0 +1,14 @@
+# Binaries
+/sahayak
+/migrate
+/seed
+*.exe
+
+# Data and secrets
+.env
+*.local
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
