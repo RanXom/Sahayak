@@ -122,9 +122,7 @@ func (p *OpenAIProvider) GenerateFollowUp(ctx context.Context, req FollowUpReque
 	if len(req.MissingFields) > 0 {
 		field = req.MissingFields[0]
 	}
-	system := "You are a warm intake assistant for Indian welfare schemes. Ask one short question in " + languageName(req.Language) + ". Respond with JSON: {\"question\":\"...\",\"question_about\":\"...\",\"is_last\":false}."
-	user := "Next information needed: " + field + ". Suggested phrasing: " + QuestionForField(field, req.Language)
-	out, err := p.generate(ctx, system, user, true)
+	out, err := p.generate(ctx, FollowUpSystemPrompt(req.Language), BuildFollowUpUserPrompt(req), true)
 	if err != nil {
 		return &FollowUpResponse{Question: QuestionForField(field, req.Language), QuestionAbout: field}, nil
 	}

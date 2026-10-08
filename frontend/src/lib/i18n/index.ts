@@ -125,7 +125,7 @@ const hi: Dict = {
 	state: 'राज्य',
 	district: 'जिला',
 	age: 'आयु',
-	gender: 'लिंग',
+	gender: 'पुरुष / नारी',
 	income: 'वार्षिक आय',
 	occupation: 'व्यवसाय',
 	eligible: 'पात्र',

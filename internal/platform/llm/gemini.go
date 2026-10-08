@@ -129,11 +129,7 @@ func (p *GeminiProvider) GenerateFollowUp(ctx context.Context, req FollowUpReque
 	if len(req.MissingFields) > 0 {
 		field = req.MissingFields[0]
 	}
-	langName := languageName(req.Language)
-	system := "You are a warm, respectful intake assistant for Indian welfare schemes. Ask exactly one short, clear question in " + langName + ". Do not evaluate eligibility. Do not mention specific schemes. Respond with JSON: {\"question\":\"...\",\"question_about\":\"...\",\"is_last\":false}."
-	user := "The next piece of information needed is: " + field + ".\nA good phrasing is: " + QuestionForField(field, req.Language) + "\nAsk it naturally in " + langName + "."
-
-	out, err := p.generate(ctx, system, user, true)
+	out, err := p.generate(ctx, FollowUpSystemPrompt(req.Language), BuildFollowUpUserPrompt(req), true)
 	if err != nil {
 		return &FollowUpResponse{Question: QuestionForField(field, req.Language), QuestionAbout: field}, nil
 	}

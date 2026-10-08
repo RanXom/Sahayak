@@ -76,7 +76,7 @@ func QuestionForField(field, lang string) string {
 	type q struct{ en, hi string }
 	questions := map[string]q{
 		"state":             {"Which state do you live in?", "आप किस राज्य में रहते हैं?"},
-		"gender":            {"What is your gender?", "आपका लिंग क्या है?"},
+		"gender":            {"Please tell me whether you are male or female.", "कृपया बताएं कि आप पुरुष या नारी हैं।"},
 		"age":               {"How old are you?", "आपकी उम्र कितनी है?"},
 		"marital_status":    {"What is your marital status?", "आपकी वैवाहिक स्थिति क्या है?"},
 		"income_annual":     {"What is your annual family income?", "आपकी वार्षिक पारिवारिक आय कितनी है?"},
@@ -103,6 +103,59 @@ func QuestionForField(field, lang string) string {
 		return v.en
 	}
 	return "Could you tell me more about your " + strings.ReplaceAll(field, "_", " ") + "?"
+}
+
+// FollowUpSystemPrompt builds the system prompt used to phrase the next turn.
+// The model is allowed to answer questions about Sahayak itself, then must ask
+// exactly one intake question. It may never decide eligibility.
+func FollowUpSystemPrompt(lang string) string {
+	return "You are Sahayak, a warm, respectful assistant that helps Indian citizens " +
+		"discover welfare schemes and build their profile by voice or text. " +
+		"The user may ask questions about you, what you do, how voice input works, or " +
+		"which languages you support; when they do, answer briefly and helpfully first.\n\n" +
+		"RULES:\n" +
+		"1. Always write in " + languageName(lang) + ".\n" +
+		"2. If the user's latest message is a question or greeting, answer it briefly and accurately first.\n" +
+		"3. Then, if the next piece of information is still needed, ask exactly one short, clear question about it.\n" +
+		"4. Do not ask again for information the user has already given.\n" +
+		"5. Never decide or explain eligibility. Never name specific schemes. Never invent facts, documents or URLs.\n" +
+		"6. Keep the whole reply to 1-3 short, natural, respectful sentences.\n" +
+		"7. Respond with JSON only: {\"question\":\"<full reply>\",\"question_about\":\"<fact key or empty>\",\"is_last\":false}."
+}
+
+// BuildFollowUpUserPrompt builds the user turn for the next reply. It carries the
+// user's latest message, the known profile, the next field to ask about and the
+// recent conversation so the model can both answer and continue the intake.
+func BuildFollowUpUserPrompt(req FollowUpRequest) string {
+	field := ""
+	if len(req.MissingFields) > 0 {
+		field = req.MissingFields[0]
+	}
+	var b strings.Builder
+	b.WriteString("User's latest message: ")
+	b.WriteString(req.UserText)
+	b.WriteString("\n\nKnown profile facts: ")
+	if len(req.ProfileFacts) == 0 {
+		b.WriteString("{}")
+	} else {
+		b.WriteString(jsonString(req.ProfileFacts))
+	}
+	b.WriteString("\n\nNext information needed: ")
+	b.WriteString(field)
+	b.WriteString("\nSuggested phrasing: ")
+	b.WriteString(QuestionForField(field, req.Language))
+	if len(req.History) > 0 {
+		b.WriteString("\n\nRecent conversation (oldest first):")
+		for _, m := range req.History {
+			b.WriteString("\n")
+			b.WriteString(m.Role)
+			b.WriteString(": ")
+			b.WriteString(m.Content)
+		}
+	}
+	b.WriteString("\n\nWrite the reply in " + languageName(req.Language) +
+		": first answer the user's message if it is a question, then ask the next question. Respond with JSON only.")
+	return b.String()
 }
 
 // FallbackExplanation builds a deterministic explanation when the LLM is unavailable.

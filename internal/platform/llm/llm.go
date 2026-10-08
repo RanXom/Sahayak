@@ -28,8 +28,13 @@ type ExtractFactsResponse struct {
 	NeedsFollowUp []string       `json:"needs_follow_up"`
 }
 
-// FollowUpRequest asks the LLM to phrase the next intake question.
+// FollowUpRequest asks the LLM to phrase the next intake question. It also
+// carries the user's latest message, known profile facts and recent history so
+// the model can answer questions about Sahayak before asking the next question.
 type FollowUpRequest struct {
+	UserText      string
+	ProfileFacts  map[string]any
+	History       []Message
 	MissingFields []string
 	Language      string
 	Context       map[string]any

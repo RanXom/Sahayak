@@ -276,6 +276,9 @@ func (s *Service) process(ctx context.Context, userID string, conv *Conversation
 		}
 	case !ready:
 		fu, err := s.llm.GenerateFollowUp(ctx, llm.FollowUpRequest{
+			UserText:      text,
+			ProfileFacts:  updatedProfile.Facts,
+			History:       llmHistory(conv.Messages),
 			MissingFields: []string{nextField},
 			Language:      lang,
 			Context:       convCtx,
@@ -440,6 +443,25 @@ func detectScriptLang(text string) string {
 		}
 	}
 	return ""
+}
+
+// llmHistory converts stored conversation messages into LLM history, keeping
+// only the most recent turns and skipping empty entries.
+func llmHistory(messages []Message) []llm.Message {
+	const maxHistory = 6
+	start := 0
+	if len(messages) > maxHistory {
+		start = len(messages) - maxHistory
+	}
+	out := make([]llm.Message, 0, len(messages)-start)
+	for _, m := range messages[start:] {
+		content := strings.TrimSpace(m.ContentText)
+		if content == "" {
+			continue
+		}
+		out = append(out, llm.Message{Role: m.Role, Content: content})
+	}
+	return out
 }
 
 func intFromAny(v any) int {
