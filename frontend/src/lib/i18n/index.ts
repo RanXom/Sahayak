@@ -8,6 +8,8 @@ type Dict = Record<string, string>;
 const en: Dict = {
 	app_name: 'Sahayak',
 	tagline: 'Discover welfare schemes you may be eligible for',
+	hero_blurb:
+		'Speak or type in your language. Sahayak understands your situation and finds the government welfare schemes you may be eligible for.',
 	login: 'Login',
 	logout: 'Log out',
 	phone_number: 'Phone number',
@@ -80,6 +82,10 @@ const en: Dict = {
 	deadline: 'Deadline',
 	reminders: 'Reminders',
 	no_schemes: 'No matching schemes found based on your current profile.',
+	no_schemes_note: 'This does not mean you are ineligible for all government schemes.',
+	browse_schemes: 'Browse schemes',
+	guest_schemes_cta: 'Log in to see which schemes you may be eligible for.',
+	official_website: 'Official website',
 	understood: 'What Sahayak understands',
 	not_provided: 'Not provided',
 	edit: 'Edit',
@@ -105,6 +111,8 @@ const en: Dict = {
 const hi: Dict = {
 	app_name: 'सहायक',
 	tagline: 'आप जिन कल्याणकारी योजनाओं के पात्र हो सकते हैं, उन्हें खोजें',
+	hero_blurb:
+		'अपनी भाषा में बोलें या लिखें। सहायक आपकी स्थिति समझता है और आपको मिल सकने वाली सरकारी कल्याणकारी योजनाएँ खोजता है।',
 	login: 'लॉगिन',
 	logout: 'लॉग आउट',
 	phone_number: 'फ़ोन नंबर',
@@ -177,6 +185,10 @@ const hi: Dict = {
 	deadline: 'अंतिम तिथि',
 	reminders: 'अनुस्मारक',
 	no_schemes: 'आपकी वर्तमान प्रोफ़ाइल के अनुसार कोई मेल खाती योजना नहीं मिली।',
+	no_schemes_note: 'इसका मतलब यह नहीं है कि आप सभी सरकारी योजनाओं के लिए अपात्र हैं।',
+	browse_schemes: 'योजनाएँ देखें',
+	guest_schemes_cta: 'आप किन योजनाओं के पात्र हो सकते हैं, यह जानने के लिए लॉगिन करें।',
+	official_website: 'आधिकारिक वेबसाइट',
 	understood: 'सहायक जो समझता है',
 	not_provided: 'उपलब्ध नहीं',
 	edit: 'संपादित करें',
@@ -202,6 +214,8 @@ const hi: Dict = {
 const ta: Dict = {
 	app_name: 'சகாயக்',
 	tagline: 'நீங்கள் தகுதியுள்ள நலத்திட்டங்களைக் கண்டறியுங்கள்',
+	hero_blurb:
+		'உங்கள் மொழியில் பேசுங்கள் அல்லது எழுதுங்கள். சகாயக் உங்கள் நிலையைப் புரிந்துகொண்டு நீங்கள் தகுதிபெறக்கூடிய அரசு நலத்திட்டங்களைக் கண்டறியும்.',
 	login: 'உள்நுழை',
 	logout: 'வெளியேறு',
 	phone_number: 'தொலைபேசி எண்',
@@ -274,6 +288,10 @@ const ta: Dict = {
 	deadline: 'காலக்கெடு',
 	reminders: 'நினைவூட்டல்கள்',
 	no_schemes: 'உங்கள் சுயவிவரத்தின் அடிப்படையில் பொருத்தமான திட்டங்கள் இல்லை.',
+	no_schemes_note: 'நீங்கள் அனைத்து அரசு திட்டங்களுக்கும் தகுதியற்றவர் என்று இது அர்த்தமல்ல.',
+	browse_schemes: 'திட்டங்களைப் பார்க்க',
+	guest_schemes_cta: 'நீங்கள் எந்த திட்டங்களுக்கு தகுதி பெறலாம் என்பதை அறிய உள்நுழையவும்.',
+	official_website: 'அதிகாரப்பூர்வ இணையதளம்',
 	understood: 'சகாயக் புரிந்துகொண்டது',
 	not_provided: 'வழங்கப்படவில்லை',
 	edit: 'திருத்து',
