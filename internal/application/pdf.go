@@ -14,6 +14,7 @@ import (
 	"github.com/johnfercher/maroto/v2/pkg/consts/align"
 	"github.com/johnfercher/maroto/v2/pkg/consts/border"
 	"github.com/johnfercher/maroto/v2/pkg/consts/fontstyle"
+	"github.com/johnfercher/maroto/v2/pkg/core"
 	"github.com/johnfercher/maroto/v2/pkg/core/entity"
 	"github.com/johnfercher/maroto/v2/pkg/props"
 
@@ -48,24 +49,6 @@ var scriptFonts = []struct {
 	{"olchiki", "NotoSansOlChiki"},
 	{"meetei", "NotoSansMeeteiMayek"},
 	{"latin", "NotoSans"},
-}
-
-// langFamily maps a language code to the script font family that renders it.
-var langFamily = map[string]string{
-	"hi": "devanagari", "mr": "devanagari", "ne": "devanagari", "sa": "devanagari",
-	"brx": "devanagari", "doi": "devanagari", "kok": "devanagari", "mai": "devanagari",
-	"bn": "bengali", "as": "bengali",
-	"gu": "gujarati",
-	"kn": "kannada",
-	"ml": "malayalam",
-	"or": "oriya", "od": "oriya",
-	"pa": "gurmukhi",
-	"ta": "tamil",
-	"te": "telugu",
-	"ur": "arabic", "ks": "arabic", "sd": "arabic",
-	"sat": "olchiki",
-	"mni": "meetei",
-	"en":  "latin",
 }
 
 // customFont implements entity.CustomFont for embedded Indic fonts.
@@ -152,13 +135,175 @@ func (g *PDFGenerator) defaultFamily() string {
 	return ""
 }
 
-// familyFor returns the best available font family for a language, falling back
-// to the default family when the script font is not installed.
-func (g *PDFGenerator) familyFor(lang string) string {
-	if f, ok := langFamily[lang]; ok && g.loaded[f] {
-		return f
+// textRun is a single-script slice of a string paired with a font that
+// contains all of its glyphs.
+type textRun struct {
+	text   string
+	family string
+}
+
+// isASCIILetter reports runes absent from the Noto Indic fonts. gofpdf reads
+// only cmap format 4, which in these files lacks A-Z a-z, so ASCII letters
+// must always render with the default (Latin) font.
+func isASCIILetter(r rune) bool {
+	return (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z')
+}
+
+// splitRuns divides s into script runs: ASCII letters always take the default
+// font, while Indic-script runs take their script font. Digits, spaces and
+// common punctuation survive in every font, so they attach to the surrounding
+// run — including a leading run, which keeps bullets ("-  ...") glued to the
+// text that follows instead of stranding them in their own column.
+func (g *PDFGenerator) splitRuns(s string) []textRun {
+	var runs []textRun
+	var cur strings.Builder
+	kind := 0 // 0 = neutrals only so far, 1 = latin-letter run, 2 = indic run
+	fam := ""
+	flush := func() {
+		if cur.Len() == 0 {
+			return
+		}
+		f := g.family
+		if kind == 2 {
+			f = fam
+		}
+		runs = append(runs, textRun{text: cur.String(), family: f})
+		cur.Reset()
+		kind = 0
 	}
-	return g.family
+	for _, r := range s {
+		if isASCIILetter(r) {
+			if kind == 2 {
+				flush()
+			}
+			kind = 1
+			cur.WriteRune(r)
+			continue
+		}
+		if f := scriptFamily(string(r)); f != "" {
+			ff := f
+			if !g.loaded[f] {
+				ff = g.family
+			}
+			if kind == 2 && fam == ff {
+				cur.WriteRune(r)
+				continue
+			}
+			if kind != 0 {
+				flush()
+			}
+			kind = 2
+			fam = ff
+			cur.WriteRune(r)
+			continue
+		}
+		cur.WriteRune(r)
+	}
+	flush()
+	return runs
+}
+
+// apportion splits width into integer parts proportional to counts,
+// each at least 1, summing exactly to width.
+func apportion(width int, counts []int) []int {
+	n := len(counts)
+	out := make([]int, n)
+	if n == 0 {
+		return out
+	}
+	total := 0
+	for _, c := range counts {
+		total += c
+	}
+	if total == 0 {
+		out[0] = width
+		return out
+	}
+	used := 0
+	for i, c := range counts {
+		w := width * c / total
+		if w < 1 {
+			w = 1
+		}
+		out[i] = w
+		used += w
+	}
+	// Fix rounding drift on the largest part.
+	for used > width {
+		big := 0
+		for i := range out {
+			if out[i] > out[big] {
+				big = i
+			}
+		}
+		if out[big] <= 1 {
+			break
+		}
+		out[big]--
+		used--
+	}
+	for used < width {
+		big := 0
+		for i := range counts {
+			if counts[i] > counts[big] {
+				big = i
+			}
+		}
+		out[big]++
+		used++
+	}
+	return out
+}
+
+// runCols renders s as one column per script run, sharing width
+// proportionally. Single-run text keeps today's exact single-column layout.
+func runCols(s string, width int, base func(fam string) props.Text, g *PDFGenerator) []core.Col {
+	runs := g.splitRuns(s)
+	if len(runs) == 0 {
+		return []core.Col{text.NewCol(width, "", base(g.family))}
+	}
+	if len(runs) == 1 {
+		return []core.Col{text.NewCol(width, runs[0].text, base(runs[0].family))}
+	}
+	counts := make([]int, len(runs))
+	for i, r := range runs {
+		counts[i] = len([]rune(r.text))
+	}
+	widths := apportion(width, counts)
+	cols := make([]core.Col, len(runs))
+	for i, r := range runs {
+		cols[i] = text.NewCol(widths[i], r.text, base(r.family))
+	}
+	return cols
+}
+
+// scriptFamily maps the first non-Latin script found in s to a font family.
+func scriptFamily(s string) string {
+	for _, r := range s {
+		switch {
+		case r >= 0x0900 && r <= 0x097F:
+			return "devanagari"
+		case r >= 0x0980 && r <= 0x09FF:
+			return "bengali"
+		case r >= 0x0A00 && r <= 0x0A7F:
+			return "gurmukhi"
+		case r >= 0x0A80 && r <= 0x0AFF:
+			return "gujarati"
+		case r >= 0x0B00 && r <= 0x0B7F:
+			return "oriya"
+		case r >= 0x0B80 && r <= 0x0BFF:
+			return "tamil"
+		case r >= 0x0C00 && r <= 0x0C7F:
+			return "telugu"
+		case r >= 0x0C80 && r <= 0x0CFF:
+			return "kannada"
+		case r >= 0x0D00 && r <= 0x0D7F:
+			return "malayalam"
+		case r >= 0x0600 && r <= 0x06FF:
+			return "arabic"
+		}
+	}
+	return ""
 }
 
 // nativeWarning returns the disclaimer in the user's language when possible.
@@ -184,54 +329,192 @@ func (g *PDFGenerator) nativeWarning(ctx context.Context, lang string) string {
 	return ""
 }
 
+// applicantRow describes one row of the Applicant Information section: the
+// profile fact key, fallback form-data keys, and the bilingual label.
+type applicantRow struct {
+	factKey  string
+	formKeys []string
+	labelEN  string
+	labelHI  string
+}
+
+// applicantRows is the fixed order of the Applicant Information section.
+var applicantRows = []applicantRow{
+	{factKey: "full_name", formKeys: []string{"full_name", "applicant_name", "student_name"}, labelEN: "Full Name", labelHI: "पूरा नाम"},
+	{factKey: "age", formKeys: []string{"age"}, labelEN: "Age", labelHI: "आयु"},
+	{factKey: "gender", formKeys: []string{"gender"}, labelEN: "Gender", labelHI: "लिंग"},
+	{factKey: "marital_status", formKeys: []string{"marital_status"}, labelEN: "Marital Status", labelHI: "वैवाहिक स्थिति"},
+	{factKey: "occupation", formKeys: []string{"occupation"}, labelEN: "Occupation", labelHI: "व्यवसाय"},
+	{factKey: "income_annual", formKeys: []string{"income_annual"}, labelEN: "Annual Income (Rs.)", labelHI: "वार्षिक आय (रु.)"},
+	{factKey: "ration_card_type", formKeys: []string{"ration_card_number"}, labelEN: "Ration Card", labelHI: "राशन कार्ड"},
+	{factKey: "residence_type", formKeys: []string{"village", "city"}, labelEN: "Residence / Village-City", labelHI: "निवास / गांव-शहर"},
+	{factKey: "caste_category", formKeys: nil, labelEN: "Caste Category", labelHI: "जाति वर्ग"},
+	{factKey: "land_acres", formKeys: []string{"land_acres"}, labelEN: "Land Holding (acres)", labelHI: "भूमि जोत (एकड़)"},
+	{factKey: "has_bank_account", formKeys: []string{"bank_account_number"}, labelEN: "Bank Account", labelHI: "बैंक खाता"},
+	{factKey: "has_aadhaar", formKeys: []string{"aadhaar_number"}, labelEN: "Aadhaar", labelHI: "आधार"},
+}
+
+// applicantValue resolves a row: profile fact first, then form-data fallbacks.
+// The second return is false when nothing is known.
+func applicantValue(row applicantRow, facts, formData map[string]any) (string, bool) {
+	if v, ok := facts[row.factKey]; ok && !isBlank(v) {
+		return prettyValue(v), true
+	}
+	for _, k := range row.formKeys {
+		if v, ok := formData[k]; ok && !isBlank(v) {
+			return prettyValue(v), true
+		}
+	}
+	return "", false
+}
+
+func isBlank(v any) bool {
+	if v == nil {
+		return true
+	}
+	if s, ok := v.(string); ok {
+		return strings.TrimSpace(s) == ""
+	}
+	return false
+}
+
+// prettyValue humanizes raw fact codes ("widowed" -> "Widowed", "bpl" -> "BPL").
+func prettyValue(v any) string {
+	if b, ok := v.(bool); ok {
+		if b {
+			return "Yes"
+		}
+		return "No"
+	}
+	s := formatValue(v)
+	if s == "-" {
+		return s
+	}
+	if len(s) <= 4 && s == strings.ToLower(s) {
+		return strings.ToUpper(s)
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
 // Generate renders the PDF and returns its path.
-func (g *PDFGenerator) Generate(ctx context.Context, userID, appID string, sch *domain.Scheme, formData map[string]any, lang string) (string, error) {
+func (g *PDFGenerator) Generate(ctx context.Context, userID, appID string, sch *domain.Scheme, formData map[string]any, prof *domain.Profile, lang string) (string, error) {
 	m := maroto.New(g.cfg)
-	family := g.familyFor(lang)
+	gray := &props.Color{Red: 90, Green: 90, Blue: 90}
 
-	titleStyle := props.Text{Size: 16, Style: fontstyle.Bold, Family: family, Top: 1}
-	subStyle := props.Text{Size: 9, Family: family, Color: &props.Color{Red: 90, Green: 90, Blue: 90}}
-	sectionStyle := props.Text{Size: 11, Style: fontstyle.Bold, Family: family, Top: 2, Bottom: 1}
-	labelStyle := props.Text{Size: 10, Style: fontstyle.Bold, Family: family, Left: 1}
-	valueStyle := props.Text{Size: 10, Family: family, Left: 1}
-	bodyStyle := props.Text{Size: 9, Family: family, Left: 1, Right: 1}
-	warnStyle := props.Text{Size: 9, Style: fontstyle.Bold, Family: family, Left: 2, Right: 2, Top: 2, Bottom: 2}
-
-	// Header.
-	m.AddAutoRow(text.NewCol(12, sch.Name(lang), titleStyle))
-	m.AddAutoRow(text.NewCol(12, "Sahayak · Application Reference / आवेदन संदर्भ", subStyle))
-
-	// Yellow disclaimer banner (English + native).
-	m.AddAutoRow(text.NewCol(12, warningEN, warnStyle).WithStyle(yellowCell()))
-	if native := g.nativeWarning(ctx, lang); native != "" {
-		nativeFamily := g.familyFor(lang)
-		m.AddAutoRow(text.NewCol(12, native, props.Text{
-			Size: 9, Style: fontstyle.Bold, Family: nativeFamily, Left: 2, Right: 2, Top: 1, Bottom: 2,
-		}).WithStyle(yellowCell()))
+	hi := lang == "hi"
+	title := sch.Name(lang)
+	subtitle := "Sahayak Application Reference"
+	refLine := fmt.Sprintf("Reference ID: %s, Date: %s", shortRef(appID), time.Now().Format("02 Jan 2006"))
+	if hi {
+		subtitle = "सहायक आवेदन संदर्भ"
+		refLine = fmt.Sprintf("संदर्भ आईडी: %s, दिनांक: %s", shortRef(appID), time.Now().Format("02 Jan 2006"))
+	}
+	section := func(en, hiText string) string {
+		if hi {
+			return hiText
+		}
+		return en
 	}
 
-	// Applicant details.
-	m.AddAutoRow(text.NewCol(12, "Applicant Details", sectionStyle))
-	for _, f := range sch.ApplicationFields {
-		value := formatValue(formData[f.FieldName])
-		m.AddAutoRow(
-			text.NewCol(5, f.Label(lang), labelStyle).WithStyle(rowCell()),
-			text.NewCol(7, value, valueStyle).WithStyle(rowCell()),
-		)
+	titleBase := func(fam string) props.Text {
+		return props.Text{Size: 18, Style: fontstyle.Bold, Family: fam, Top: 4, Bottom: 1}
+	}
+	subBase := func(fam string) props.Text {
+		return props.Text{Size: 9, Family: fam, Color: gray, Bottom: 1}
+	}
+	refBase := func(fam string) props.Text {
+		return props.Text{Size: 9, Family: fam, Color: gray, Bottom: 4}
+	}
+	sectionBase := func(fam string) props.Text {
+		return props.Text{Size: 12, Style: fontstyle.Bold, Family: fam, Top: 6, Bottom: 3}
+	}
+	labelBase := func(fam string) props.Text {
+		return props.Text{Size: 10, Style: fontstyle.Bold, Family: fam, Left: 3, Top: 2, Bottom: 2}
+	}
+	valueBase := func(fam string) props.Text {
+		return props.Text{Size: 10, Family: fam, Left: 3, Top: 2, Bottom: 2}
+	}
+	bodyBase := func(fam string) props.Text {
+		return props.Text{Size: 9, Family: fam, Left: 3, Right: 3, Top: 1, Bottom: 1}
+	}
+	warnBase := func(fam string) props.Text {
+		return props.Text{Size: 9, Style: fontstyle.Bold, Family: fam, Left: 3, Right: 3, Top: 3, Bottom: 3}
+	}
+	bordered := func(cols []core.Col) []core.Col {
+		for i, c := range cols {
+			cols[i] = c.WithStyle(rowCell())
+		}
+		return cols
+	}
+	row := func(label string, value string) {
+		cols := runCols(label, 5, labelBase, g)
+		cols = append(cols, runCols(value, 7, valueBase, g)...)
+		m.AddAutoRow(bordered(cols)...)
+	}
+	full := func(s string, base func(fam string) props.Text, cell *props.Cell) {
+		cols := runCols(s, 12, base, g)
+		if cell != nil {
+			cols = bordered(cols)
+		}
+		m.AddAutoRow(cols...)
+	}
+
+	var facts map[string]any
+	if prof != nil {
+		facts = prof.Facts
+	}
+
+	// Header. All chrome follows the reply language so every string is
+	// single-script; values are split into script runs by runCols.
+	full(title, titleBase, nil)
+	full(subtitle, subBase, nil)
+	full(refLine, refBase, nil)
+
+	// Yellow disclaimer banner (English + native).
+	for _, c := range runCols(warningEN, 12, warnBase, g) {
+		m.AddAutoRow(c.WithStyle(yellowCell()))
+	}
+	if native := g.nativeWarning(ctx, lang); native != "" {
+		for _, c := range runCols(native, 12, warnBase, g) {
+			m.AddAutoRow(c.WithStyle(yellowCell()))
+		}
+	}
+
+	// Applicant information from the profile, falling back to form data.
+	// Rows without any known value are skipped (except the name row) so the
+	// section never renders as a wall of dashes.
+	full(section("Applicant Information", "आवेदक की जानकारी"), sectionBase, nil)
+	for i, r := range applicantRows {
+		value, ok := applicantValue(r, facts, formData)
+		if !ok && i > 0 {
+			continue
+		}
+		if !ok {
+			value = "-"
+		}
+		row(section(r.labelEN, r.labelHI), value)
+	}
+
+	// Scheme application details as filled in the form.
+	if len(sch.ApplicationFields) > 0 {
+		full(section("Application Details", "आवेदन विवरण"), sectionBase, nil)
+		for _, f := range sch.ApplicationFields {
+			row(f.Label(lang), formatValue(formData[f.FieldName]))
+		}
 	}
 
 	// Required documents.
 	if len(sch.RequiredDocuments) > 0 {
-		m.AddAutoRow(text.NewCol(12, "Required Documents", sectionStyle))
+		full(section("Required Documents", "आवश्यक दस्तावेज़"), sectionBase, nil)
 		for _, d := range sch.RequiredDocuments {
 			name := d.DocumentNameEN
-			if lang == "hi" && d.DocumentNameHI != "" {
+			if hi && d.DocumentNameHI != "" {
 				name = d.DocumentNameHI
 			}
 			if d.IsMandatory {
 				name += " *"
 			}
-			m.AddAutoRow(text.NewCol(12, "• "+name, bodyStyle))
+			full("-  "+name, bodyBase, nil)
 		}
 	}
 
@@ -241,16 +524,22 @@ func (g *PDFGenerator) Generate(ctx context.Context, userID, appID string, sch *
 		url = sch.OfficialURL
 	}
 	if url != "" {
-		m.AddAutoRow(text.NewCol(12, "Official Application Link", sectionStyle))
+		full(section("Official Application Link", "आधिकारिक आवेदन लिंक"), sectionBase, nil)
 		link := url
-		m.AddAutoRow(text.NewCol(12, url, props.Text{Size: 9, Family: family, Left: 1, Hyperlink: &link}))
+		linkBase := func(fam string) props.Text {
+			return props.Text{Size: 9, Family: fam, Left: 3, Top: 1, Bottom: 2, Hyperlink: &link}
+		}
+		for _, c := range runCols(url, 12, linkBase, g) {
+			m.AddAutoRow(c)
+		}
 	}
 
 	// Footer.
-	m.AddAutoRow(text.NewCol(12,
-		fmt.Sprintf("Generated by Sahayak on %s. This document is not an official submission.",
-			time.Now().Format("02 Jan 2006")),
-		props.Text{Size: 8, Family: family, Color: &props.Color{Red: 120, Green: 120, Blue: 120}, Top: 2, Align: align.Left}))
+	footBase := func(fam string) props.Text {
+		return props.Text{Size: 8, Family: fam, Color: &props.Color{Red: 120, Green: 120, Blue: 120}, Top: 6, Align: align.Left}
+	}
+	full(fmt.Sprintf("Generated by Sahayak on %s. This document is not an official submission.",
+		time.Now().Format("02 Jan 2006")), footBase, nil)
 
 	doc, err := m.Generate()
 	if err != nil {
@@ -266,6 +555,17 @@ func (g *PDFGenerator) Generate(ctx context.Context, userID, appID string, sch *
 		return "", err
 	}
 	return path, nil
+}
+
+// shortRef keeps the reference line readable (first segment of the UUID).
+func shortRef(appID string) string {
+	if i := strings.Index(appID, "-"); i > 0 {
+		return strings.ToUpper(appID[:i])
+	}
+	if len(appID) > 8 {
+		return strings.ToUpper(appID[:8])
+	}
+	return appID
 }
 
 func yellowCell() *props.Cell {

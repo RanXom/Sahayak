@@ -142,7 +142,13 @@ func (s *Service) GeneratePDF(ctx context.Context, userID, appID, lang string) (
 	if err != nil {
 		return nil, domain.Internal("Could not load scheme", err)
 	}
-	path, err := s.pdf.Generate(ctx, userID, app.ID, sch, app.FormData, lang)
+	// Profile is best-effort: the applicant section degrades to form data
+	// when no profile exists yet.
+	var prof *domain.Profile
+	if p, err := s.profiles.GetByUserID(ctx, userID); err == nil {
+		prof = p
+	}
+	path, err := s.pdf.Generate(ctx, userID, app.ID, sch, app.FormData, prof, lang)
 	if err != nil {
 		return nil, domain.Internal("Could not generate PDF", err)
 	}
