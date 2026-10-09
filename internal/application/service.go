@@ -235,7 +235,9 @@ func (s *Service) buildFormView(app *Application, sch *domain.Scheme, lang strin
 }
 
 func missingRequired(fields []domain.ApplicationField, formData map[string]any) []string {
-	var missing []string
+	// Initialized (not nil): encodes as [] rather than null, which clients
+	// read .length on.
+	missing := []string{}
 	for _, f := range fields {
 		if !f.IsRequired {
 			continue

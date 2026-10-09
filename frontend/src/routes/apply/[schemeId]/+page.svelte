@@ -126,8 +126,8 @@
 			{/each}
 		</div>
 
-		{#if view.missing_fields.length > 0}
-			<p class="muted sm">{t('missing_docs')}: {view.missing_fields.join(', ')}</p>
+		{#if (view.missing_fields ?? []).length > 0}
+			<p class="muted sm">{t('missing_docs')}: {(view.missing_fields ?? []).join(', ')}</p>
 		{/if}
 
 		<div class="actions">
