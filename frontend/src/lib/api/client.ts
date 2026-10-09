@@ -4,6 +4,23 @@ const ENV_BASE = import.meta.env.VITE_API_URL as string | undefined;
 
 const API_BASE = ENV_BASE && ENV_BASE.length > 0 ? ENV_BASE : '/api/v1';
 
+// resolveMediaUrl turns a backend-provided path (e.g. /api/v1/audio/temp/x.wav)
+// into a fetchable URL. The backend returns origin-relative paths, but the
+// browser may be on a different origin than the API (local dev, split
+// subdomains), so prefix the API origin when the base is absolute.
+export function resolveMediaUrl(path: string): string {
+	if (!path.startsWith('/')) return path;
+	if (!browser) return path;
+	if (API_BASE.startsWith('http')) {
+		try {
+			return new URL(API_BASE).origin + path;
+		} catch {
+			return path;
+		}
+	}
+	return path;
+}
+
 export interface ApiErrorBody {
 	error: { code: string; message: string; details?: Record<string, string> };
 }

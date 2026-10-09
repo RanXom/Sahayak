@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { api, ApiError, type TurnResult } from '$lib/api/client';
+	import { api, ApiError, resolveMediaUrl, type TurnResult } from '$lib/api/client';
 	import { language, translate, type Lang } from '$lib/i18n';
 	import { authenticated } from '$lib/stores/auth';
 	import { VoiceRecorder, isRecordingSupported } from '$lib/voice/recorder';
@@ -158,7 +158,7 @@
 		turns = [...turns, { user: res.transcript, assistant: res.response_text }];
 		ready = res.ready_for_review;
 		if (res.response_audio_url) {
-			await speak(res.response_audio_url);
+			await speak(resolveMediaUrl(res.response_audio_url));
 		} else {
 			uiState = 'idle';
 		}
