@@ -182,6 +182,10 @@
 			if (playbackCtx.state === 'suspended') await playbackCtx.resume();
 
 			const audio = new Audio(url);
+			// Required: the API is a different origin (local :8080, split
+			// subdomains in prod). Without CORS mode, Web Audio zeroes the
+			// output and playback is silently mute.
+			audio.crossOrigin = 'anonymous';
 			const src = playbackCtx.createMediaElementSource(audio);
 			src.connect(playbackAnalyser!);
 			analyser = playbackAnalyser;
