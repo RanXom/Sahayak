@@ -63,6 +63,8 @@ type Config struct {
 	// DemoOTP, when non-empty, allows login with this fixed code and returns it
 	// in the OTP-request response. Intended for demos only.
 	DemoOTP string
+	// DemoOTPAuto is true when DemoOTP was defaulted (no SMS keys, non-prod).
+	DemoOTPAuto bool
 
 	AllowedOrigins []string
 
@@ -184,6 +186,13 @@ func Load() (*Config, error) {
 			return nil, fmt.Errorf("PHONE_HASH_PEPPER must be set in production")
 		}
 		cfg.PhoneHashPepper = "dev-insecure-pepper-change-me"
+	}
+	if cfg.DemoOTP == "" && !cfg.IsProduction() && cfg.MSG91AuthKey == "" && cfg.FirebaseProjectID == "" {
+		// No SMS path configured outside production: fall back to a fixed demo
+		// code so anyone can log in locally. The OTP-request response carries
+		// it and the UI pre-fills it.
+		cfg.DemoOTP = "123456"
+		cfg.DemoOTPAuto = true
 	}
 	return cfg, nil
 }

@@ -11,6 +11,13 @@ services:
       - "8080:8080"
     environment:
       APP_ENV: development
+      # Browser calls the API cross-origin locally, so allow the frontend.
+      CORS_ALLOWED_ORIGINS: http://localhost:3000
   frontend:
     ports:
       - "3000:3000"
+    build:
+      args:
+        # Absolute API URL: the SvelteKit container serves no /api routes, so
+        # the browser must talk to the API container directly.
+        VITE_API_URL: http://localhost:8080/api/v1
