@@ -193,9 +193,8 @@ func (s *Service) process(ctx context.Context, userID string, conv *Conversation
 	// Mirror the user's script when they write in an Indian language, so the
 	// reply language matches what they actually used. Otherwise fall back to the
 	// provided (UI) language, detecting only when it is unknown.
-	if script := detectScriptLang(text); script != "" {
-		lang = script
-	} else if lang == "" {
+	lang = resolveReplyLang(text, lang)
+	if lang == "" {
 		if detected, err := s.llm.DetectLanguage(ctx, text); err == nil && detected != "" {
 			lang = detected
 		} else {
@@ -431,6 +430,52 @@ func (s *Service) missingSummary(ctx context.Context, userID, lang string) strin
 		return ""
 	}
 	return strings.TrimSpace(txt)
+}
+
+// resolveReplyLang picks the reply language for a turn. A non-empty lang that
+// is already written in the text's script (e.g. Marathi detected by STT for
+// Devanagari input) is kept as-is; otherwise the script guess wins (e.g. Hindi
+// input with an English UI falls back to Hindi). This matters because
+// Devanagari is shared by Hindi, Marathi, Nepali and Sanskrit, and the script
+// guess alone defaults all of it to Hindi.
+func resolveReplyLang(text, lang string) string {
+	script := detectScriptLang(text)
+	if script == "" {
+		return lang
+	}
+	if lang != "" && scriptOf(lang) == scriptOf(script) {
+		return lang
+	}
+	return script
+}
+
+// scriptOf maps a language code to its primary script, using the same codes
+// detectScriptLang returns so the two are directly comparable.
+func scriptOf(code string) string {
+	switch strings.ToLower(strings.TrimSpace(code)) {
+	case "hi", "mr", "ne", "sa", "bho":
+		return "hi" // Devanagari
+	case "bn", "as":
+		return "bn" // Bengali-Assamese
+	case "pa":
+		return "pa" // Gurmukhi
+	case "gu":
+		return "gu" // Gujarati
+	case "or":
+		return "or" // Odia
+	case "ta":
+		return "ta" // Tamil
+	case "te":
+		return "te" // Telugu
+	case "kn":
+		return "kn" // Kannada
+	case "ml":
+		return "ml" // Malayalam
+	case "ur":
+		return "ur" // Arabic script
+	default:
+		return ""
+	}
 }
 
 // detectScriptLang returns an ISO 639-1 code when the text is written in a
