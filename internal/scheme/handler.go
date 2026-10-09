@@ -17,6 +17,19 @@ type Handler struct {
 // NewHandler constructs a scheme Handler.
 func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 
+// List handles GET /schemes (public, published schemes only).
+func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
+	schemes, err := h.svc.ListPublished(r.Context(), nil)
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	if schemes == nil {
+		schemes = []*domain.Scheme{}
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"schemes": schemes})
+}
+
 // Get handles GET /schemes/{id}.
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	sch, err := h.svc.GetPublished(r.Context(), chi.URLParam(r, "id"))

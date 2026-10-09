@@ -115,6 +115,35 @@ func (r *Repository) ListPublished(ctx context.Context, stateID *int) ([]*domain
 	return out, nil
 }
 
+// ListPublishedBrief returns published, active schemes without rules or other
+// children. It backs the public guest-browsing endpoint: the payload must stay
+// free of evaluation internals.
+func (r *Repository) ListPublishedBrief(ctx context.Context, stateID *int) ([]*domain.Scheme, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT `+schemeColumns+`
+		FROM schemes
+		WHERE status = 'published' AND is_active = TRUE
+		  AND (scope = 'central' OR state_id = $1)
+		ORDER BY name_en`, stateID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*domain.Scheme
+	for rows.Next() {
+		s, err := scanScheme(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ListAdmin returns schemes of any status with pagination.
 func (r *Repository) ListAdmin(ctx context.Context, status string, limit, offset int) ([]*domain.Scheme, int64, error) {
 	rows, err := r.pool.Query(ctx, `

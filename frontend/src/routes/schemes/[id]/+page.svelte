@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
+	import { authenticated } from '$lib/stores/auth';
 	import { api, ApiError, type Scheme, type DocumentStatus } from '$lib/api/client';
 	import { language, translate, type Lang } from '$lib/i18n';
 	import { eligibility } from '$lib/stores/eligibility';
@@ -21,13 +22,19 @@
 	let match = $derived(($eligibility?.results ?? []).find((r) => r.scheme.id === page.params.id));
 
 	onMount(async () => {
+		const id = page.params.id as string;
 		try {
-			const id = page.params.id as string;
 			scheme = await api.scheme(id);
-			const res = await api.schemeDocuments(id);
-			docs = res.documents;
 		} catch (e) {
 			error = e instanceof ApiError ? e.message : 'Could not load scheme';
+			return;
+		}
+		// Document checklist needs a profile; guests see scheme info + login CTA.
+		try {
+			const res = await api.schemeDocuments(id);
+			docs = res.documents;
+		} catch {
+			docs = [];
 		}
 	});
 
@@ -90,10 +97,17 @@
 			</a>
 			{#if scheme.official_url}
 				<a class="btn ghost block" style="margin-top:10px" href={scheme.official_url} target="_blank"
-					>Official website</a
+					>{t('official_website')}</a
 				>
 			{/if}
 		</div>
+
+		{#if !docs.length && !$authenticated}
+			<div class="panel soft pad" style="margin-top:22px">
+				<p class="muted">{t('guest_schemes_cta')}</p>
+				<a class="btn sm" href="/login" style="margin-top:14px">{t('login')}</a>
+			</div>
+		{/if}
 
 		{#if docs.length}
 			<section style="margin-top:36px">
@@ -229,7 +243,9 @@
 		flex-wrap: wrap;
 	}
 	.quiet-link {
+		display: inline-block;
 		color: var(--accent-strong);
 		font-weight: 600;
+		padding-block: 4px;
 	}
 </style>

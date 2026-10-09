@@ -14,6 +14,12 @@ GET {{base.url}}/healthz
 GET {{base.url}}/api/v1/config
 Accept-Language: en
 
+### List published schemes (public, guest browsing)
+# @name ListSchemes
+# @assert response.statusCode == 200
+GET {{base.url}}/api/v1/schemes
+Accept-Language: en
+
 ### Request OTP
 # @name RequestOTP
 # @capture file challenge.id = response.json.challenge_id

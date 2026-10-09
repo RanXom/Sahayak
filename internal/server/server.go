@@ -292,6 +292,8 @@ func (s *Server) buildRouter() {
 			r.Get("/locations/states", s.locationHandler.ListStates)
 			r.Get("/locations/states/{id}/districts", s.locationHandler.ListDistricts)
 			r.Get("/documents/types", s.documentHandler.ListTypes)
+			r.Get("/schemes", s.schemeHandler.List)
+			r.Get("/schemes/{id}", s.schemeHandler.Get)
 			r.Get("/audio/temp/{id}", s.conversationHandler.TempAudio)
 		})
 
@@ -309,7 +311,6 @@ func (s *Server) buildRouter() {
 			r.Get("/profile/documents", s.profileHandler.GetDocuments)
 			r.Put("/profile/documents", s.profileHandler.UpdateDocuments)
 
-			r.Get("/schemes/{id}", s.schemeHandler.Get)
 			r.Get("/schemes/{id}/documents", s.documentHandler.SchemeDocuments)
 
 			r.Post("/eligibility/evaluate", s.eligibilityHandler.Evaluate)
