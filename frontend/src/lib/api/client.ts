@@ -97,7 +97,23 @@ async function request<T>(
 		headers.set('Authorization', `Bearer ${tokens.accessToken}`);
 	}
 
-	const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+	// Bound every request: a hung connection otherwise leaves pages on their
+	// loading state forever (fetch has no built-in timeout).
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), 90000);
+	let res: Response;
+	try {
+		res = await fetch(`${API_BASE}${path}`, { ...options, headers, signal: controller.signal });
+	} catch (e) {
+		if (e instanceof DOMException && e.name === 'AbortError') {
+			throw new ApiError(0, {
+				error: { code: 'TIMEOUT', message: 'Request timed out. Check your connection and retry.' }
+			});
+		}
+		throw e;
+	} finally {
+		clearTimeout(timer);
+	}
 
 	if (res.status === 401 && retry && tokens.refreshToken) {
 		if (await tryRefresh()) {
