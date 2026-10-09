@@ -101,14 +101,14 @@ INSERT INTO document_types (
 
     ('pan_card', 'PAN Card', 'पैन कार्ड',
      'Permanent Account Number issued by the Income Tax Department.', 'आयकर विभाग द्वारा जारी स्थायी खाता संख्या।',
-     'financial', 'Income Tax Department', 'आयकर विभाग', 'https://www.onlineservices.nsdl.com/',
+     'financial', 'Income Tax Department', 'आयकर विभाग', 'https://onlineservices.proteantech.in/paam/endUserRegisterContact.html',
      '1. Apply online via NSDL or UTIITSL.' || chr(10) ||
      '2. Submit identity and address proof.' || chr(10) ||
      '3. e-PAN or physical card is issued.',
      '1. एनएसडीएल या यूटीआईआईटीएसएल के माध्यम से ऑनलाइन आवेदन करें।' || chr(10) ||
      '2. पहचान और पता प्रमाण जमा करें।' || chr(10) ||
      '3. ई-पैन या भौतिक कार्ड जारी किया जाता है।',
-     '7-15 working days', '₹107', 'https://www.onlineservices.nsdl.com/'),
+     '7-15 working days', '₹107', 'https://onlineservices.proteantech.in/paam/endUserRegisterContact.html'),
 
     ('disability_cert', 'Disability Certificate', 'विकलांगता प्रमाण पत्र',
      'Certificate of disability issued by a medical board.', 'चिकित्सा बोर्ड द्वारा जारी विकलांगता प्रमाण पत्र।',
