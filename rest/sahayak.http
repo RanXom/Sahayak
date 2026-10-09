@@ -1,0 +1,419 @@
+# Sahayak backend API collection.
+# Open this workspace with:  resterm --workspace rest
+# Pick env with Ctrl+E (local = docker compose, prod = Coolify).
+# Send a request with Ctrl+Enter. Tokens/ids chain automatically via captures.
+# Auth: log in once (OTP section), the rest reuses {{auth.token}}.
+
+### Health
+# @name Health
+# @assert response.statusCode == 200
+GET {{base.url}}/healthz
+
+### Runtime config (capabilities: firebase_auth, demo_mode, ...)
+# @name Config
+GET {{base.url}}/api/v1/config
+Accept-Language: en
+
+### Request OTP
+# @name RequestOTP
+# @capture file challenge.id = response.json.challenge_id
+# @assert response.statusCode == 200
+POST {{base.url}}/api/v1/auth/otp/request
+Content-Type: application/json
+Accept-Language: en
+
+{"phone": "{{phone}}"}
+
+### Verify OTP (demo code is returned as demo_otp when DEMO_OTP is set)
+# @name VerifyOTP
+# @capture file auth.token = response.json.access_token
+# @capture file auth.refresh = response.json.refresh_token
+# @assert response.statusCode == 200
+POST {{base.url}}/api/v1/auth/otp/verify
+Content-Type: application/json
+Accept-Language: en
+
+{"challenge_id": "{{challenge.id}}", "otp": "{{demo.otp}}"}
+
+### Firebase login (paste an ID token from the web app)
+# @name FirebaseLogin
+# @capture file auth.token = response.json.access_token
+# @capture file auth.refresh = response.json.refresh_token
+POST {{base.url}}/api/v1/auth/firebase
+Content-Type: application/json
+Accept-Language: en
+
+{"id_token": "{{firebase.id_token}}"}
+
+### Refresh session
+# @name Refresh
+# @capture file auth.token = response.json.access_token
+# @capture file auth.refresh = response.json.refresh_token
+POST {{base.url}}/api/v1/auth/refresh
+Content-Type: application/json
+
+{"refresh_token": "{{auth.refresh}}"}
+
+### Me
+# @name Me
+# @auth bearer {{auth.token}}
+# @assert response.statusCode == 200
+GET {{base.url}}/api/v1/auth/me
+Accept-Language: en
+
+### Logout
+# @name Logout
+# @auth bearer {{auth.token}}
+POST {{base.url}}/api/v1/auth/logout
+Content-Type: application/json
+
+{"refresh_token": "{{auth.refresh}}"}
+
+### Get profile
+# @name GetProfile
+# @auth bearer {{auth.token}}
+GET {{base.url}}/api/v1/profile
+Accept-Language: en
+
+### Update profile (state/district/facts)
+# @name UpdateProfile
+# @auth bearer {{auth.token}}
+PUT {{base.url}}/api/v1/profile
+Content-Type: application/json
+Accept-Language: en
+
+{"state_id": 1, "facts": {"age": 45, "gender": "female", "occupation": "farmer"}}
+
+### Merge facts
+# @name MergeFacts
+# @auth bearer {{auth.token}}
+PATCH {{base.url}}/api/v1/profile/facts
+Content-Type: application/json
+Accept-Language: en
+
+{"facts": {"ration_card_type": "bpl", "residence_type": "rural"}}
+
+### Profile documents
+# @name ProfileDocuments
+# @auth bearer {{auth.token}}
+GET {{base.url}}/api/v1/profile/documents
+Accept-Language: en
+
+### Update profile documents
+# @name UpdateProfileDocuments
+# @auth bearer {{auth.token}}
+PUT {{base.url}}/api/v1/profile/documents
+Content-Type: application/json
+Accept-Language: en
+
+{"documents": [{"document_type": "aadhaar", "has_document": true}, {"document_type": "ration_card", "has_document": true}, {"document_type": "bank_account", "has_document": true}]}
+
+### Get scheme (UUID)
+# @name GetScheme
+# @auth bearer {{auth.token}}
+GET {{base.url}}/api/v1/schemes/{{scheme.id}}
+Accept-Language: en
+
+### Scheme documents
+# @name SchemeDocuments
+# @auth bearer {{auth.token}}
+GET {{base.url}}/api/v1/schemes/{{scheme.id}}/documents
+Accept-Language: en
+
+### Evaluate eligibility (uses your stored profile)
+# @name EvaluateEligibility
+# @auth bearer {{auth.token}}
+POST {{base.url}}/api/v1/eligibility/evaluate
+Content-Type: application/json
+Accept-Language: en
+
+{}
+
+### Eligibility results
+# @name EligibilityResults
+# @auth bearer {{auth.token}}
+GET {{base.url}}/api/v1/eligibility/results
+Accept-Language: en
+
+### Start conversation
+# @name StartConversation
+# @auth bearer {{auth.token}}
+# @capture file conversation.id = response.json.id
+POST {{base.url}}/api/v1/conversations
+Content-Type: application/json
+Accept-Language: en
+
+{}
+
+### Get conversation
+# @name GetConversation
+# @auth bearer {{auth.token}}
+GET {{base.url}}/api/v1/conversations/{{conversation.id}}
+Accept-Language: en
+
+### Send text turn
+# @name SendMessage
+# @auth bearer {{auth.token}}
+POST {{base.url}}/api/v1/conversations/{{conversation.id}}/message
+Content-Type: application/json
+Accept-Language: en
+
+{"text": "I am 45 years old", "language": "en"}
+
+### Send voice turn (multipart; rest/voice-sample.wav must exist)
+# @name SendVoice
+# @auth bearer {{auth.token}}
+POST {{base.url}}/api/v1/conversations/{{conversation.id}}/voice
+Content-Type: multipart/form-data; boundary=resterm-voice
+Accept-Language: en
+
+---resterm-voice
+Content-Disposition: form-data; name="audio"; filename="sample.wav"
+Content-Type: audio/wav
+
+@ ./voice-sample.wav
+---resterm-voice
+Content-Disposition: form-data; name="language"
+Content-Type: text/plain
+
+en
+---resterm-voice--
+
+### States
+# @name States
+GET {{base.url}}/api/v1/locations/states
+Accept-Language: en
+
+### Districts of state 1
+# @name Districts
+GET {{base.url}}/api/v1/locations/states/1/districts
+Accept-Language: en
+
+### Document types
+# @name DocumentTypes
+GET {{base.url}}/api/v1/documents/types
+Accept-Language: en
+
+### Create application (needs a published scheme UUID in scheme.id)
+# @name CreateApplication
+# @auth bearer {{auth.token}}
+# @capture file application.id = response.json.id
+POST {{base.url}}/api/v1/applications
+Content-Type: application/json
+Accept-Language: en
+
+{"scheme_id": "{{scheme.id}}"}
+
+### List applications
+# @name ListApplications
+# @auth bearer {{auth.token}}
+GET {{base.url}}/api/v1/applications
+Accept-Language: en
+
+### Get application
+# @name GetApplication
+# @auth bearer {{auth.token}}
+GET {{base.url}}/api/v1/applications/{{application.id}}
+Accept-Language: en
+
+### Update application form
+# @name UpdateApplicationForm
+# @auth bearer {{auth.token}}
+PUT {{base.url}}/api/v1/applications/{{application.id}}/form
+Content-Type: application/json
+Accept-Language: en
+
+{"form_data": {"full_name": "Test User", "age": 45}}
+
+### Generate application PDF
+# @name GeneratePDF
+# @auth bearer {{auth.token}}
+POST {{base.url}}/api/v1/applications/{{application.id}}/pdf
+Content-Type: application/json
+Accept-Language: en
+
+{}
+
+### Download application PDF
+# @name DownloadPDF
+# @auth bearer {{auth.token}}
+GET {{base.url}}/api/v1/applications/{{application.id}}/pdf
+Accept-Language: en
+
+### Submit application
+# @name SubmitApplication
+# @auth bearer {{auth.token}}
+POST {{base.url}}/api/v1/applications/{{application.id}}/submit
+Content-Type: application/json
+Accept-Language: en
+
+{"submission_ref": "TEST-REF-001"}
+
+### Update application status (helper/admin)
+# @name UpdateApplicationStatus
+# @auth bearer {{auth.token}}
+PUT {{base.url}}/api/v1/applications/{{application.id}}/status
+Content-Type: application/json
+Accept-Language: en
+
+{"status": "submitted"}
+
+### Notifications
+# @name Notifications
+# @auth bearer {{auth.token}}
+GET {{base.url}}/api/v1/notifications
+Accept-Language: en
+
+### Notification preferences
+# @name NotificationPreferences
+# @auth bearer {{auth.token}}
+GET {{base.url}}/api/v1/notifications/preferences
+Accept-Language: en
+
+### Update notification preferences
+# @name UpdateNotificationPreferences
+# @auth bearer {{auth.token}}
+PUT {{base.url}}/api/v1/notifications/preferences
+Content-Type: application/json
+Accept-Language: en
+
+{"channel": "sms", "enabled": true}
+
+### Helper register
+# @name HelperRegister
+# @auth bearer {{auth.token}}
+POST {{base.url}}/api/v1/helper/register
+Content-Type: application/json
+Accept-Language: en
+
+{"helper_type": "volunteer", "organization": "Test Org", "id_number": "HELP-001"}
+
+### Helper dashboard
+# @name HelperDashboard
+# @auth bearer {{auth.token}}
+GET {{base.url}}/api/v1/helper/dashboard
+Accept-Language: en
+
+### Helper start session
+# @name HelperStartSession
+# @auth bearer {{auth.token}}
+# @capture file helper.session_id = response.json.id
+POST {{base.url}}/api/v1/helper/sessions
+Content-Type: application/json
+Accept-Language: en
+
+{"purpose": "help with application"}
+
+### Helper list sessions
+# @name HelperListSessions
+# @auth bearer {{auth.token}}
+GET {{base.url}}/api/v1/helper/sessions
+Accept-Language: en
+
+### Helper get session
+# @name HelperGetSession
+# @auth bearer {{auth.token}}
+GET {{base.url}}/api/v1/helper/sessions/{{helper.session_id}}
+Accept-Language: en
+
+### Helper record consent
+# @name HelperRecordConsent
+# @auth bearer {{auth.token}}
+POST {{base.url}}/api/v1/helper/sessions/{{helper.session_id}}/consent
+Content-Type: application/json
+Accept-Language: en
+
+{"consent_text": "Citizen consented to assisted application"}
+
+### Helper end session
+# @name HelperEndSession
+# @auth bearer {{auth.token}}
+POST {{base.url}}/api/v1/helper/sessions/{{helper.session_id}}/end
+Content-Type: application/json
+Accept-Language: en
+
+{}
+
+### Admin: list schemes
+# @name AdminListSchemes
+# @auth bearer {{auth.token}}
+GET {{base.url}}/api/v1/admin/schemes
+Accept-Language: en
+
+### Admin: create scheme
+# @name AdminCreateScheme
+# @auth bearer {{auth.token}}
+POST {{base.url}}/api/v1/admin/schemes
+Content-Type: application/json
+Accept-Language: en
+
+{
+  "slug": "test-scheme",
+  "name_en": "Test Scheme",
+  "name_hi": "परीक्षण योजना",
+  "description_en": "Created via resterm",
+  "description_hi": "रेस्टर्म से बनाया गया",
+  "benefit_type": "financial",
+  "scope": "central",
+  "ministry": "Test Ministry"
+}
+
+### Admin: update scheme (replace ID with one from the list)
+# @name AdminUpdateScheme
+# @auth bearer {{auth.token}}
+PUT {{base.url}}/api/v1/admin/schemes/{{scheme.id}}
+Content-Type: application/json
+Accept-Language: en
+
+{"name_en": "Test Scheme (updated)"}
+
+### Admin: publish scheme
+# @name AdminPublishScheme
+# @auth bearer {{auth.token}}
+POST {{base.url}}/api/v1/admin/schemes/{{scheme.id}}/publish
+Content-Type: application/json
+Accept-Language: en
+
+{}
+
+### Admin: archive scheme
+# @name AdminArchiveScheme
+# @auth bearer {{auth.token}}
+POST {{base.url}}/api/v1/admin/schemes/{{scheme.id}}/archive
+Content-Type: application/json
+Accept-Language: en
+
+{}
+
+### Admin: list sources
+# @name AdminListSources
+# @auth bearer {{auth.token}}
+GET {{base.url}}/api/v1/admin/sources
+Accept-Language: en
+
+### Admin: create source
+# @name AdminCreateSource
+# @auth bearer {{auth.token}}
+POST {{base.url}}/api/v1/admin/sources
+Content-Type: application/json
+Accept-Language: en
+
+{"name": "Test Source", "source_type": "gov_portal", "url": "https://example.gov.in"}
+
+### Admin: list candidates
+# @name AdminListCandidates
+# @auth bearer {{auth.token}}
+GET {{base.url}}/api/v1/admin/candidates
+Accept-Language: en
+
+### Admin: audit log
+# @name AdminAudit
+# @auth bearer {{auth.token}}
+GET {{base.url}}/api/v1/admin/audit
+Accept-Language: en
+
+### Admin: list helpers
+# @name AdminListHelpers
+# @auth bearer {{auth.token}}
+GET {{base.url}}/api/v1/admin/helpers
+Accept-Language: en
