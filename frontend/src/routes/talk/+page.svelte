@@ -32,6 +32,8 @@
 	let recorder: VoiceRecorder | null = null;
 	let playbackCtx: AudioContext | null = null;
 	let playbackAnalyser: AnalyserNode | null = null;
+	let lastAudioUrl = $state('');
+	let needsTapToPlay = $state(false);
 
 	const maxMs = voiceConfig().maxDurationMs;
 	let lastAssistant = $derived(turns.length ? turns[turns.length - 1].assistant : '');
@@ -165,6 +167,8 @@
 	}
 
 	async function speak(url: string) {
+		lastAudioUrl = url;
+		needsTapToPlay = false;
 		try {
 			const Ctx =
 				window.AudioContext ??
@@ -184,14 +188,33 @@
 			uiState = 'speaking';
 			await new Promise<void>((resolve) => {
 				audio.onended = () => resolve();
-				audio.onerror = () => resolve();
-				audio.play().catch(() => resolve());
+				audio.onerror = () => {
+					console.warn('[talk] audio element error', audio.error);
+					resolve();
+				};
+				audio.play().catch((err) => {
+					// Autoplay policy: transient activation from the mic tap has
+					// expired by the time the reply arrives. Fall back to an
+					// explicit tap-to-play button (a real user gesture).
+					console.warn('[talk] audio play blocked, needs tap', err);
+					needsTapToPlay = true;
+					resolve();
+				});
 			});
-		} catch {
-			/* playback is best-effort */
+		} catch (err) {
+			console.warn('[talk] speak failed', err);
+			needsTapToPlay = lastAudioUrl !== '';
 		}
 		analyser = null;
-		uiState = 'idle';
+		if (!needsTapToPlay) uiState = 'idle';
+	}
+
+	// replay plays the last reply; called from a button so the browser treats
+	// it as a user gesture and allows audio output.
+	async function replay() {
+		if (!lastAudioUrl) return;
+		needsTapToPlay = false;
+		await speak(lastAudioUrl);
 	}
 
 	function reset() {
@@ -244,6 +267,13 @@
 			<div class="err" role="alert">
 				<span>{errorMsg}</span>
 				<button class="btn ghost sm" onclick={reset}>{t('try_again')}</button>
+			</div>
+		{/if}
+
+		{#if needsTapToPlay && lastAudioUrl}
+			<div class="err" role="alert">
+				<span>{t('tap_to_play')}</span>
+				<button class="btn ghost sm" onclick={replay}>▶</button>
 			</div>
 		{/if}
 
