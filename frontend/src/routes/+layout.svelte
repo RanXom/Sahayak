@@ -14,6 +14,7 @@
 	import { language, translate, type Lang } from '$lib/i18n';
 	import { authenticated, loadUser, logout } from '$lib/stores/auth';
 	import Icon from '$lib/components/Icon.svelte';
+	import InstallButton from '$lib/components/InstallButton.svelte';
 
 	let { children } = $props();
 
@@ -95,6 +96,7 @@
 					<option value="en">English</option>
 					<option value="ta">தமிழ்</option>
 				</select>
+				<InstallButton compact />
 				{#if $authenticated}
 					<button class="btn quiet sm" onclick={doLogout}>{t('logout')}</button>
 				{/if}

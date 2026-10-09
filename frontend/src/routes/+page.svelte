@@ -8,6 +8,7 @@
 	import Ring from '$lib/components/Ring.svelte';
 	import StatusChip from '$lib/components/StatusChip.svelte';
 	import Icon from '$lib/components/Icon.svelte';
+	import InstallButton from '$lib/components/InstallButton.svelte';
 
 	let lang = $state<Lang>('hi');
 	language.subscribe((v) => (lang = v));
@@ -75,6 +76,7 @@
 			{t('login')}
 			<span class="disc"><Icon name="arrow" size={15} /></span>
 		</a>
+		<InstallButton />
 	</section>
 {:else}
 	<section class="shell page">
