@@ -8,8 +8,7 @@
 		eligibilityLoading,
 		eligibilityError
 	} from '$lib/stores/eligibility';
-	import type { EligibilityResult, Scheme } from '$lib/api/client';
-	import { api } from '$lib/api/client';
+	import type { EligibilityResult } from '$lib/api/client';
 	import StatusChip from '$lib/components/StatusChip.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 
@@ -20,21 +19,9 @@
 	}
 
 	let filter = $state<'all' | 'eligible' | 'potentially_eligible'>('all');
-	let guestSchemes = $state<Scheme[]>([]);
-	let guestError = $state('');
 
-	onMount(async () => {
-		if ($authenticated) {
-			loadEligibility(false, lang);
-			return;
-		}
-		// Guest browsing: published schemes, no eligibility.
-		try {
-			const res = await api.schemes();
-			guestSchemes = res.schemes;
-		} catch {
-			guestError = 'Could not load schemes';
-		}
+	onMount(() => {
+		if ($authenticated) loadEligibility(false, lang);
 	});
 
 	function name(r: EligibilityResult) {
@@ -72,44 +59,19 @@
 	<header class="head">
 		<div>
 			<p class="eyebrow">{t('schemes')}</p>
-			<h1 style="margin-top:8px">{$authenticated ? t('schemes_matched') : t('browse_schemes')}</h1>
+			<h1 style="margin-top:8px">{t('schemes_matched')}</h1>
 		</div>
-		{#if $authenticated}
-			<button
-				class="btn ghost sm"
-				onclick={() => loadEligibility(true, lang)}
-				disabled={$eligibilityLoading}
-				aria-label="Refresh"
-			>
-				{$eligibilityLoading ? '…' : '↻'}
-			</button>
-		{/if}
+		<button
+			class="btn ghost sm"
+			onclick={() => loadEligibility(true, lang)}
+			disabled={$eligibilityLoading}
+			aria-label="Refresh"
+		>
+			{$eligibilityLoading ? '…' : '↻'}
+		</button>
 	</header>
 
-	{#if !$authenticated}
-		<div class="panel soft pad" style="margin-top:18px">
-			<p class="muted">{t('guest_schemes_cta')}</p>
-			<a class="btn sm" href="/login" style="margin-top:14px">{t('login')}</a>
-		</div>
-		{#if guestError}
-			<div class="banner" style="margin-top:16px">{guestError}</div>
-		{:else}
-			<div class="list" style="margin-top:8px">
-				{#each guestSchemes as s (s.id)}
-					<a class="scheme-row" href="/schemes/{s.id}">
-						<div class="row-between">
-							<h3 class="sname">{lang === 'hi' ? s.name_hi : s.name_en}</h3>
-						</div>
-						{#if s.benefit_amount}
-							<div class="meta">
-								<span class="muted sm">{s.benefit_amount}</span>
-							</div>
-						{/if}
-					</a>
-				{/each}
-			</div>
-		{/if}
-	{:else if $eligibility}
+	{#if $eligibility}
 		<p class="muted sm" style="margin-top:10px">{$eligibility.coverage_note}</p>
 		<div class="summary">
 			<span class="chip ok">{counts.eligible} {t('eligible')}</span>
@@ -121,18 +83,15 @@
 		<div class="banner" style="margin-top:16px">{$eligibilityError}</div>
 	{/if}
 
-	{#if $authenticated}
-		<div class="filters" role="tablist">
-			<button class:on={filter === 'all'} onclick={() => (filter = 'all')}>{t('schemes')}</button>
-			<button class:on={filter === 'eligible'} onclick={() => (filter = 'eligible')}
-				>{t('eligible')}</button
-			>
-			<button
-				class:on={filter === 'potentially_eligible'}
-				onclick={() => (filter = 'potentially_eligible')}>{t('potentially_eligible')}</button
-			>
-		</div>
-	{/if}
+	<div class="filters" role="tablist">
+		<button class:on={filter === 'all'} onclick={() => (filter = 'all')}>{t('schemes')}</button>
+		<button class:on={filter === 'eligible'} onclick={() => (filter = 'eligible')}
+			>{t('eligible')}</button
+		>
+		<button class:on={filter === 'potentially_eligible'} onclick={() => (filter = 'potentially_eligible')}
+			>{t('potentially_eligible')}</button
+		>
+	</div>
 
 	{#if $eligibilityLoading && !$eligibility}
 		<div class="stack" style="--gap:14px; margin-top:20px">
@@ -176,7 +135,9 @@
 	{:else if $eligibility}
 		<div class="empty">
 			<p class="muted">{t('no_schemes')}</p>
-			<p class="dim sm" style="margin-top:8px">{t('no_schemes_note')}</p>
+			<p class="dim sm" style="margin-top:8px">
+				This does not mean you are ineligible for all government schemes.
+			</p>
 		</div>
 	{/if}
 </section>

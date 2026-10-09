@@ -42,16 +42,6 @@ type Input struct {
 	ApplicationFields    []domain.ApplicationField       `json:"application_fields"`
 }
 
-// ListPublished returns published, active schemes (central + optional state)
-// without evaluation internals, for public guest browsing.
-func (s *Service) ListPublished(ctx context.Context, stateID *int) ([]*domain.Scheme, error) {
-	out, err := s.repo.ListPublishedBrief(ctx, stateID)
-	if err != nil {
-		return nil, domain.Internal("Could not list schemes", err)
-	}
-	return out, nil
-}
-
 // GetPublished returns a published scheme by ID.
 func (s *Service) GetPublished(ctx context.Context, id string) (*domain.Scheme, error) {
 	sch, err := s.repo.GetPublishedByID(ctx, id)

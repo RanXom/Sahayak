@@ -341,7 +341,6 @@ export const api = {
 	// Eligibility
 	evaluate: (lang = 'hi') =>
 		request<EligibilityResponse>('/eligibility/evaluate', { method: 'POST', body: JSON.stringify({}) }, lang),
-	schemes: () => request<{ schemes: Scheme[] }>('/schemes'),
 	scheme: (id: string) => request<Scheme>(`/schemes/${id}`),
 	schemeDocuments: (id: string) =>
 		request<{ scheme_id: string; documents: DocumentStatus[]; missing_count: number; all_present: boolean }>(

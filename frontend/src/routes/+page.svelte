@@ -67,14 +67,14 @@
 	<section class="shell read" style="padding: 8vh 20px 40px">
 		<p class="eyebrow">{t('app_name')}</p>
 		<h1 style="margin-top:14px">{t('tagline')}</h1>
-		<p class="muted" style="margin-top:16px; max-width: 46ch">{t('hero_blurb')}</p>
+		<p class="muted" style="margin-top:16px; max-width: 46ch">
+			Speak or type in your language. Sahayak understands your situation and finds the government
+			welfare schemes you may be eligible for.
+		</p>
 		<a class="btn" href="/login" style="margin-top:28px">
 			{t('login')}
 			<span class="disc"><Icon name="arrow" size={15} /></span>
 		</a>
-		<div style="margin-top:14px">
-			<a class="quiet-link" href="/schemes">{t('browse_schemes')}</a>
-		</div>
 	</section>
 {:else}
 	<section class="shell page">
@@ -94,21 +94,13 @@
 
 		<div class="stats">
 			<a class="stat" href="/profile">
-				{#if profile}
-					<Ring value={completeness} size={62} label={t('profile_completeness')} />
-					<div>
-						<div class="stat-label">{t('profile_completeness')}</div>
-						<div class="muted sm">
-							{completeness >= 1 ? t('ready') : t('complete_profile')}
-						</div>
+				<Ring value={completeness} size={62} label={t('profile_completeness')} />
+				<div>
+					<div class="stat-label">{t('profile_completeness')}</div>
+					<div class="muted sm">
+						{completeness >= 1 ? t('ready') : t('complete_profile')}
 					</div>
-				{:else}
-					<div class="skeleton" style="width:62px; height:62px; border-radius:50%" aria-hidden="true"></div>
-					<div>
-						<div class="stat-label">{t('profile_completeness')}</div>
-						<div class="skeleton" style="width:120px; height:14px; margin-top:8px" aria-hidden="true"></div>
-					</div>
-				{/if}
+				</div>
 			</a>
 			<a class="stat" href="/schemes">
 				<div class="value mono">{eligibilityLoading ? '—' : eligibleCount}</div>
@@ -254,12 +246,9 @@
 		letter-spacing: -0.01em;
 	}
 	.quiet-link {
-		display: inline-block;
 		font-size: var(--step--1);
 		font-weight: 600;
 		color: var(--accent-strong);
-		/* 13px text at 1.6 line-height is ~21px tall; pad to the 28px minimum. */
-		padding-block: 4px;
 	}
 	.quiet-link:hover {
 		text-decoration: underline;
