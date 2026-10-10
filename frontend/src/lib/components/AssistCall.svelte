@@ -15,6 +15,7 @@
 	let callState = $state<CallState>('idle');
 	let error = $state('');
 	let muted = $state(false);
+	let mediaNotice = $state('');
 	let videoOn = $state(true);
 	let lastSeen = $state('');
 	let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -58,15 +59,29 @@
 	}
 
 	async function ensureMedia(withVideo: boolean) {
-		localStream = await navigator.mediaDevices.getUserMedia({
-			audio: true,
-			video: withVideo
-		});
+		mediaNotice = '';
+		try {
+			localStream = await navigator.mediaDevices.getUserMedia({
+				audio: true,
+				video: withVideo
+			});
+		} catch (e) {
+			// Typical on same-device testing (camera already held by the other
+			// tab) or camera-less phones: fall back to voice-only instead of
+			// failing the whole call.
+			if (!withVideo) throw e;
+			const name = e instanceof DOMException ? e.name : '';
+			if (name !== 'OverconstrainedError' && name !== 'NotReadableError' && name !== 'NotFoundError' && name !== 'NotAllowedError') {
+				throw e;
+			}
+			localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+			mediaNotice = t('call_camera_fallback');
+		}
 		if (localVideo) {
 			localVideo.srcObject = localStream;
 			localVideo.muted = true;
 		}
-		videoOn = withVideo && localStream.getVideoTracks().length > 0;
+		videoOn = localStream.getVideoTracks().length > 0;
 	}
 
 	async function startCall(withVideo: boolean) {
@@ -208,6 +223,7 @@
 <div class="callbox panel soft pad">
 	<p class="eyebrow">{t('call_title')}</p>
 	{#if error}<div class="banner" style="margin-top:10px">{error}</div>{/if}
+	{#if mediaNotice}<p class="muted sm" style="margin-top:10px">{mediaNotice}</p>{/if}
 
 	{#if callState === 'idle' || callState === 'ended'}
 		<div class="callbtns">

@@ -203,7 +203,8 @@ const en: Dict = {
 	call_incoming: 'Incoming call',
 	call_failed: 'Call setup failed. Check camera/microphone permissions and try again.',
 	call_media_denied: 'Camera/microphone unavailable. Check permissions.',
-	call_stun_note: 'Calls connect directly between browsers. Some office or mobile networks may block them.'
+	call_stun_note: 'Calls connect directly between browsers. Some office or mobile networks may block them.',
+	call_camera_fallback: 'Camera unavailable (it may be in use by another tab) — continuing with voice only.'
 };
 
 const hi: Dict = {
@@ -404,7 +405,8 @@ const hi: Dict = {
 	call_incoming: 'आ रही कॉल',
 	call_failed: 'कॉल नहीं जुड़ पाई। कैमरा/माइक अनुमति जाँचें और फिर कोशिश करें।',
 	call_media_denied: 'कैमरा/माइक उपलब्ध नहीं। अनुमति जाँचें।',
-	call_stun_note: 'कॉल सीधे ब्राउज़रों के बीच जुड़ती है। कुछ ऑफिस या मोबाइल नेटवर्क रोक सकते हैं।'
+	call_stun_note: 'कॉल सीधे ब्राउज़रों के बीच जुड़ती है। कुछ ऑफिस या मोबाइल नेटवर्क रोक सकते हैं।',
+	call_camera_fallback: 'कैमरा उपलब्ध नहीं (शायद दूसरे टैब में इस्तेमाल हो रहा है) — सिर्फ आवाज़ पर जारी है।'
 };
 
 const ta: Dict = {
