@@ -10,7 +10,7 @@
 		type AssistSession,
 		type DraftValue
 	} from '$lib/api/client';
-	import { user } from '$lib/stores/auth';
+	import { handleAuthError, user } from '$lib/stores/auth';
 	import { language, translate, type Lang } from '$lib/i18n';
 	import Icon from '$lib/components/Icon.svelte';
 	import AssistCall from '$lib/components/AssistCall.svelte';
@@ -43,6 +43,7 @@
 		try {
 			session = await api.getAssistSession(sid());
 		} catch (e) {
+			if (handleAuthError(e)) return;
 			error = e instanceof ApiError ? e.message : t('error_state');
 			return;
 		}
@@ -92,6 +93,7 @@
 			messages = [...messages, { ...m, mine: true }];
 			lastMsgSeen = m.created_at;
 		} catch (e) {
+			if (handleAuthError(e)) return;
 			error = e instanceof ApiError ? e.message : t('error_state');
 			chatInput = text;
 		}
@@ -107,6 +109,7 @@
 			fieldName = '';
 			fieldValue = '';
 		} catch (e) {
+			if (handleAuthError(e)) return;
 			error = e instanceof ApiError ? e.message : t('error_state');
 		} finally {
 			busy = false;
@@ -120,6 +123,7 @@
 			const d = await api.confirmDraftValue(sid(), name);
 			drafts = [...drafts.filter((x) => x.field_name !== d.field_name), d];
 		} catch (e) {
+			if (handleAuthError(e)) return;
 			error = e instanceof ApiError ? e.message : t('error_state');
 		} finally {
 			busy = false;
@@ -135,6 +139,7 @@
 			ctx = c;
 			drafts = c.drafts ?? [];
 		} catch (e) {
+			if (handleAuthError(e)) return;
 			error = e instanceof ApiError ? e.message : t('error_state');
 		} finally {
 			busy = false;
@@ -147,6 +152,7 @@
 		try {
 			session = await api.endAssistSession(sid());
 		} catch (e) {
+			if (handleAuthError(e)) return;
 			error = e instanceof ApiError ? e.message : t('error_state');
 		} finally {
 			busy = false;

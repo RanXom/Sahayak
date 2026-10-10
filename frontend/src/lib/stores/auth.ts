@@ -1,10 +1,34 @@
+import { goto } from '$app/navigation';
 import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { api, clearTokens, isAuthenticated, setTokens, type User } from '$lib/api/client';
+import { ApiError, api, clearTokens, isAuthenticated, setTokens, type User } from '$lib/api/client';
 import { firebaseSignOut } from '$lib/firebase';
 
 export const user = writable<User | null>(null);
 export const authenticated = writable<boolean>(browser ? isAuthenticated() : false);
+
+if (browser) {
+	// Cross-tab sync: logging out (or token wipe) elsewhere must reflect here,
+	// otherwise this tab keeps firing token-less requests.
+	window.addEventListener('storage', (e) => {
+		if (e.key === null || e.key === 'sahayak_access') {
+			const ok = isAuthenticated();
+			authenticated.set(ok);
+			if (!ok) user.set(null);
+		}
+	});
+}
+
+// handleAuthError sends the user to login on 401s (dead/expired session).
+// Returns true when it handled the error.
+export function handleAuthError(e: unknown): boolean {
+	if (e instanceof ApiError && e.status === 401) {
+		logout();
+		goto('/login');
+		return true;
+	}
+	return false;
+}
 
 export async function login(challengeId: string, otp: string, role?: string): Promise<User> {
 	const res = await api.verifyOtp(challengeId, otp, role);

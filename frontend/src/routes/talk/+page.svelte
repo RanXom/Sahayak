@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { api, ApiError, resolveMediaUrl, type TurnResult } from '$lib/api/client';
 	import { language, translate, type Lang } from '$lib/i18n';
-	import { authenticated } from '$lib/stores/auth';
+	import { authenticated, handleAuthError } from '$lib/stores/auth';
 	import { VoiceRecorder, isRecordingSupported } from '$lib/voice/recorder';
 	import { voiceConfig } from '$lib/voice/config';
 	import Orb from '$lib/components/Orb.svelte';
@@ -136,6 +136,7 @@
 			const res = await api.sendVoice(conversationId, blob, lang);
 			await applyResult(res);
 		} catch (e) {
+			if (handleAuthError(e)) return;
 			errorMsg = e instanceof ApiError ? e.message : t('error_state');
 			uiState = 'error';
 		}
@@ -151,6 +152,7 @@
 			const res = await api.sendMessage(conversationId, text, lang);
 			await applyResult(res);
 		} catch (e) {
+			if (handleAuthError(e)) return;
 			errorMsg = e instanceof ApiError ? e.message : t('error_state');
 			uiState = 'error';
 		}

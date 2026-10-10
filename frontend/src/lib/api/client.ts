@@ -69,17 +69,32 @@ export function isAuthenticated(): boolean {
 	return !!tokens.accessToken;
 }
 
+// Single-flight refresh: concurrent 401s must share one rotation, otherwise
+// the losers burn the already-rotated refresh token and nuke the session.
+let refreshPromise: Promise<boolean> | null = null;
+
 async function tryRefresh(): Promise<boolean> {
 	if (!tokens.refreshToken) return false;
-	const res = await fetch(`${API_BASE}/auth/refresh`, {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ refresh_token: tokens.refreshToken })
-	});
-	if (!res.ok) return false;
-	const data = await res.json();
-	setTokens(data.access_token, data.refresh_token);
-	return true;
+	if (!refreshPromise) {
+		refreshPromise = (async () => {
+			try {
+				const res = await fetch(`${API_BASE}/auth/refresh`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ refresh_token: tokens.refreshToken })
+				});
+				if (!res.ok) return false;
+				const data = await res.json();
+				setTokens(data.access_token, data.refresh_token);
+				return true;
+			} catch {
+				return false;
+			} finally {
+				refreshPromise = null;
+			}
+		})();
+	}
+	return refreshPromise;
 }
 
 async function request<T>(

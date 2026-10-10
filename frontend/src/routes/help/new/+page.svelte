@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { api, ApiError } from '$lib/api/client';
+	import { handleAuthError } from '$lib/stores/auth';
 	import { language, translate, type Lang } from '$lib/i18n';
 	import Icon from '$lib/components/Icon.svelte';
 
@@ -46,6 +47,7 @@
 			});
 			goto(`/help/${res.id}`);
 		} catch (e) {
+			if (handleAuthError(e)) return;
 			error = e instanceof ApiError ? e.message : t('error_state');
 		} finally {
 			busy = false;

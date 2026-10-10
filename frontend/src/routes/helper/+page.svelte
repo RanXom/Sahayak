@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { api, ApiError, type AssistRequest, type AssistSession, type HelperProfile } from '$lib/api/client';
-	import { user } from '$lib/stores/auth';
+	import { handleAuthError, user } from '$lib/stores/auth';
 	import { language, translate, type Lang } from '$lib/i18n';
 	import Icon from '$lib/components/Icon.svelte';
 
@@ -39,6 +39,7 @@
 			const q = await api.assistQueue();
 			queue = q.requests;
 		} catch (e) {
+			if (handleAuthError(e)) return;
 			error = e instanceof ApiError ? e.message : t('error_state');
 		}
 		try {
@@ -57,6 +58,7 @@
 			profile.is_available = res.is_available;
 			await reload();
 		} catch (e) {
+			if (handleAuthError(e)) return;
 			error = e instanceof ApiError ? e.message : t('error_state');
 		}
 	}
@@ -69,6 +71,7 @@
 			const sess = await api.acceptAssistRequest(id);
 			goto(`/assist/${sess.id}`);
 		} catch (e) {
+			if (handleAuthError(e)) return;
 			error = e instanceof ApiError ? e.message : t('error_state');
 			await reload();
 		} finally {
