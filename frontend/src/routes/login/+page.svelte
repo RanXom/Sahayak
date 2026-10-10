@@ -23,6 +23,9 @@
 	// Login method: Firebase SMS when both sides support it, else server OTP.
 	let method = $state<'firebase' | 'server'>('server');
 	let firebaseOffered = $state(false);
+	// Intended account path. Client is default; the server stays authoritative
+	// (role applies to brand-new accounts only).
+	let role = $state<'client' | 'helper'>('client');
 
 	onMount(async () => {
 		try {
@@ -69,11 +72,21 @@
 		error = '';
 		busy = true;
 		try {
+			let u;
 			if (method === 'firebase') {
 				const idToken = await confirmFirebaseOtp(otp.trim());
-				await loginWithFirebase(idToken);
+				u = await loginWithFirebase(idToken, role === 'helper' ? 'helper' : undefined);
 			} else {
-				await login(challengeId, otp.trim());
+				u = await login(challengeId, otp.trim(), role === 'helper' ? 'helper' : undefined);
+			}
+			if (u.role === 'helper') {
+				try {
+					await api.getHelperProfile();
+					goto('/helper');
+				} catch {
+					goto('/helper/register');
+				}
+				return;
 			}
 			goto('/');
 		} catch (e) {
@@ -91,6 +104,25 @@
 	<p class="muted" style="margin-top:8px">{t('tagline')}</p>
 
 	{#if error}<div class="banner" style="margin-top:20px">{error}</div>{/if}
+
+	<div class="methods" role="tablist" aria-label={t('login_role')}>
+		<button
+			type="button"
+			class="method"
+			class:active={role === 'client'}
+			onclick={() => (role = 'client')}
+		>
+			{t('login_client')}
+		</button>
+		<button
+			type="button"
+			class="method"
+			class:active={role === 'helper'}
+			onclick={() => (role = 'helper')}
+		>
+			{t('login_helper')}
+		</button>
+	</div>
 
 	{#if firebaseOffered}
 		<div class="methods" role="tablist">

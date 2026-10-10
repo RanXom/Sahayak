@@ -37,6 +37,9 @@ func (h *Handler) RequestOTP(w http.ResponseWriter, r *http.Request) {
 type otpVerifyBody struct {
 	ChallengeID string `json:"challenge_id"`
 	OTP         string `json:"otp"`
+	// Role is the intended registration path ("client" default, "helper").
+	// It applies only to brand-new accounts; the server ignores it otherwise.
+	Role string `json:"role"`
 }
 
 // VerifyOTP handles POST /auth/otp/verify.
@@ -50,7 +53,7 @@ func (h *Handler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, domain.InvalidInput("challenge_id and otp are required"))
 		return
 	}
-	res, err := h.svc.VerifyOTP(r.Context(), body.ChallengeID, body.OTP, clientIP(r), r.UserAgent())
+	res, err := h.svc.VerifyOTP(r.Context(), body.ChallengeID, body.OTP, clientIP(r), r.UserAgent(), body.Role)
 	if err != nil {
 		httpx.WriteError(w, err)
 		return
@@ -60,6 +63,7 @@ func (h *Handler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 
 type firebaseLoginBody struct {
 	IDToken string `json:"id_token"`
+	Role    string `json:"role"`
 }
 
 // FirebaseLogin handles POST /auth/firebase.
@@ -73,7 +77,7 @@ func (h *Handler) FirebaseLogin(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, domain.InvalidInput("id_token is required"))
 		return
 	}
-	res, err := h.svc.LoginWithFirebase(r.Context(), body.IDToken, clientIP(r), r.UserAgent())
+	res, err := h.svc.LoginWithFirebase(r.Context(), body.IDToken, clientIP(r), r.UserAgent(), body.Role)
 	if err != nil {
 		httpx.WriteError(w, err)
 		return

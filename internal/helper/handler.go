@@ -26,9 +26,14 @@ func userID(r *http.Request) (string, bool) {
 }
 
 type registerBody struct {
-	HelperType   string `json:"helper_type"`
-	Organization string `json:"organization"`
-	IDNumber     string `json:"id_number"`
+	HelperType    string   `json:"helper_type"`
+	Organization  string   `json:"organization"`
+	IDNumber      string   `json:"id_number"`
+	DisplayName   string   `json:"display_name"`
+	Languages     []string `json:"languages"`
+	Categories    []string `json:"categories"`
+	Experience    string   `json:"experience"`
+	TermsAccepted bool     `json:"terms_accepted"`
 }
 
 // Register handles POST /helper/register.
@@ -43,7 +48,78 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, err)
 		return
 	}
-	profile, err := h.svc.Register(r.Context(), id, body.HelperType, body.Organization, body.IDNumber)
+	profile, err := h.svc.Register(r.Context(), id, ProfileInput{
+		HelperType: body.HelperType, Organization: body.Organization, IDNumber: body.IDNumber,
+		DisplayName: body.DisplayName, Languages: body.Languages, Categories: body.Categories,
+		Experience: body.Experience, TermsAccepted: body.TermsAccepted,
+	}, clientIP(r), r.UserAgent())
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, profile)
+}
+
+// UpdateProfile handles PUT /helper/profile.
+func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
+	id, ok := userID(r)
+	if !ok {
+		httpx.WriteError(w, domain.Unauthorized("Authentication required"))
+		return
+	}
+	var body registerBody
+	if err := httpx.DecodeJSON(w, r, &body); err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	profile, err := h.svc.UpdateProfile(r.Context(), id, ProfileInput{
+		HelperType: body.HelperType, Organization: body.Organization, IDNumber: body.IDNumber,
+		DisplayName: body.DisplayName, Languages: body.Languages, Categories: body.Categories,
+		Experience: body.Experience, TermsAccepted: body.TermsAccepted,
+	}, clientIP(r), r.UserAgent())
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, profile)
+}
+
+// SetAvailability handles PUT /helper/availability.
+func (h *Handler) SetAvailability(w http.ResponseWriter, r *http.Request) {
+	id, ok := userID(r)
+	if !ok {
+		httpx.WriteError(w, domain.Unauthorized("Authentication required"))
+		return
+	}
+	var body struct {
+		IsAvailable bool `json:"is_available"`
+	}
+	if err := httpx.DecodeJSON(w, r, &body); err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	if err := h.svc.SetAvailability(r.Context(), id, body.IsAvailable, clientIP(r), r.UserAgent()); err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"is_available": body.IsAvailable})
+}
+
+func clientIP(r *http.Request) string {
+	if ip := r.Header.Get("X-Forwarded-For"); ip != "" {
+		return ip
+	}
+	return r.RemoteAddr
+}
+
+// Profile handles GET /helper/profile.
+func (h *Handler) Profile(w http.ResponseWriter, r *http.Request) {
+	id, ok := userID(r)
+	if !ok {
+		httpx.WriteError(w, domain.Unauthorized("Authentication required"))
+		return
+	}
+	profile, err := h.svc.Profile(r.Context(), id)
 	if err != nil {
 		httpx.WriteError(w, err)
 		return

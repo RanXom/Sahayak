@@ -11,40 +11,139 @@ import (
 // ConsentStatement is the exact text shown to a citizen before a helper session.
 const ConsentStatement = "I consent to Sahayak assisting me with welfare scheme discovery and application. My information will be used only for this purpose and will not be shared without my permission."
 
+// Accounts promotes citizen accounts to the helper role.
+type Accounts interface {
+	PromoteToHelper(ctx context.Context, userID string) (bool, error)
+}
+
 // Service implements helper mode use cases.
 type Service struct {
 	repo      *Repository
+	accounts  Accounts
 	audit     audit.Logger
 	maxPerDay int
 }
 
 // NewService constructs the helper service.
-func NewService(repo *Repository, auditLogger audit.Logger, maxPerDay int) *Service {
+func NewService(repo *Repository, accounts Accounts, auditLogger audit.Logger, maxPerDay int) *Service {
 	if maxPerDay <= 0 {
 		maxPerDay = 50
 	}
-	return &Service{repo: repo, audit: auditLogger, maxPerDay: maxPerDay}
+	return &Service{repo: repo, accounts: accounts, audit: auditLogger, maxPerDay: maxPerDay}
 }
 
-// Register creates or updates a helper profile.
-func (s *Service) Register(ctx context.Context, userID, helperType, organization, idNumber string) (*HelperProfile, error) {
-	switch helperType {
-	case "asha", "csc_operator", "field_worker":
-	default:
-		return nil, domain.InvalidInput("Invalid helper_type")
+// ValidHelperTypes are the accepted helper kinds. Registration never implies
+// government certification; verified status comes only from admin review.
+func ValidHelperTypes() []string {
+	return []string{"asha", "csc_operator", "field_worker", "volunteer", "ngo_worker"}
+}
+
+// Register creates or updates a helper profile and promotes the account to
+// the helper role (citizens only; admins untouched). Helpers must still pass
+// admin verification to earn the verified badge.
+func (s *Service) Register(ctx context.Context, userID string, in ProfileInput, ip, ua string) (*HelperProfile, error) {
+	if err := ValidateProfileInput(in); err != nil {
+		return nil, err
 	}
-	h, err := s.repo.UpsertHelperProfile(ctx, userID, helperType, organization, idNumber)
+	h, err := s.repo.UpsertHelperProfile(ctx, userID, in)
 	if err != nil {
 		return nil, domain.Internal("Could not register helper", err)
 	}
+	promoted, err := s.accounts.PromoteToHelper(ctx, userID)
+	if err != nil {
+		return nil, domain.Internal("Could not update account role", err)
+	}
+	s.audit.Log(ctx, audit.Entry{ActorID: &userID, ActorRole: domain.RoleHelper,
+		Action: "helper.register", ResourceType: "helper", ResourceID: userID,
+		IPAddress: ip, UserAgent: ua, Details: map[string]any{"promoted": promoted}})
 	return h, nil
 }
 
-// Verify marks a helper verified (admin action).
+// UpdateProfile edits the caller's helper profile.
+func (s *Service) UpdateProfile(ctx context.Context, userID string, in ProfileInput, ip, ua string) (*HelperProfile, error) {
+	if err := ValidateProfileInput(in); err != nil {
+		return nil, err
+	}
+	h, err := s.repo.UpsertHelperProfile(ctx, userID, in)
+	if err != nil {
+		return nil, domain.Internal("Could not update helper profile", err)
+	}
+	s.audit.Log(ctx, audit.Entry{ActorID: &userID, ActorRole: domain.RoleHelper,
+		Action: "helper.profile.update", ResourceType: "helper", ResourceID: userID,
+		IPAddress: ip, UserAgent: ua})
+	return h, nil
+}
+
+// SetAvailability flips queue visibility.
+func (s *Service) SetAvailability(ctx context.Context, userID string, available bool, ip, ua string) error {
+	if _, err := s.repo.GetHelperProfile(ctx, userID); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return domain.InvalidInput("Complete your helper profile first")
+		}
+		return domain.Internal("Could not load helper profile", err)
+	}
+	if err := s.repo.SetAvailability(ctx, userID, available); err != nil {
+		return domain.Internal("Could not update availability", err)
+	}
+	s.audit.Log(ctx, audit.Entry{ActorID: &userID, ActorRole: domain.RoleHelper,
+		Action: "helper.availability", ResourceType: "helper", ResourceID: userID,
+		IPAddress: ip, UserAgent: ua, Details: map[string]any{"is_available": available}})
+	return nil
+}
+
+// ValidateProfileInput enforces the registration contract.
+func ValidateProfileInput(in ProfileInput) error {
+	ok := false
+	for _, t := range ValidHelperTypes() {
+		if t == in.HelperType {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		return domain.InvalidInput("Invalid helper_type")
+	}
+	if len(in.Languages) == 0 {
+		return domain.InvalidInput("Select at least one assistance language")
+	}
+	for _, l := range in.Languages {
+		if !validLang(l) {
+			return domain.InvalidInput("Unsupported language: " + l)
+		}
+	}
+	for _, c := range in.Categories {
+		if !validCategory(c) {
+			return domain.InvalidInput("Unknown assistance category: " + c)
+		}
+	}
+	if !in.TermsAccepted {
+		return domain.InvalidInput("Helper terms must be accepted")
+	}
+	return nil
+}
+
+func validLang(l string) bool {
+	switch l {
+	case "hi", "en", "ta", "mr", "bn", "te", "kn", "ml", "gu", "pa", "or", "ur":
+		return true
+	}
+	return false
+}
+
+func validCategory(c string) bool {
+	switch c {
+	case "scheme_discovery", "application_help", "document_help":
+		return true
+	}
+	return false
+}
+
+// Verify marks a helper verified (admin action) and ensures the role.
 func (s *Service) Verify(ctx context.Context, adminID, helperUserID string) error {
 	if err := s.repo.Verify(ctx, helperUserID, adminID); err != nil {
 		return domain.Internal("Could not verify helper", err)
 	}
+	_, _ = s.accounts.PromoteToHelper(ctx, helperUserID)
 	s.audit.Log(ctx, audit.Entry{
 		ActorID:      &adminID,
 		ActorRole:    domain.RoleAdmin,
@@ -53,6 +152,18 @@ func (s *Service) Verify(ctx context.Context, adminID, helperUserID string) erro
 		ResourceID:   helperUserID,
 	})
 	return nil
+}
+
+// Profile returns the caller's helper profile.
+func (s *Service) Profile(ctx context.Context, userID string) (*HelperProfile, error) {
+	h, err := s.repo.GetHelperProfile(ctx, userID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, domain.NotFound("Helper profile not found")
+		}
+		return nil, domain.Internal("Could not load helper profile", err)
+	}
+	return h, nil
 }
 
 // List returns helper profiles.

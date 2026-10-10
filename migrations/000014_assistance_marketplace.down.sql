@@ -1,0 +1,14 @@
+DROP TABLE IF EXISTS consent_records;
+DROP TABLE IF EXISTS session_draft_values;
+DROP TABLE IF EXISTS session_signals;
+DROP TABLE IF EXISTS session_messages;
+ALTER TABLE helper_sessions DROP COLUMN IF EXISTS ended_by;
+ALTER TABLE helper_sessions DROP COLUMN IF EXISTS request_id;
+DROP TABLE IF EXISTS assistance_requests;
+ALTER TABLE helper_profiles DROP COLUMN IF EXISTS terms_accepted_at;
+ALTER TABLE helper_profiles DROP COLUMN IF EXISTS is_available;
+ALTER TABLE helper_profiles DROP COLUMN IF EXISTS experience;
+ALTER TABLE helper_profiles DROP COLUMN IF EXISTS categories;
+ALTER TABLE helper_profiles DROP COLUMN IF EXISTS languages;
+ALTER TABLE helper_profiles DROP COLUMN IF EXISTS display_name;
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;

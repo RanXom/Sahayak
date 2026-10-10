@@ -93,6 +93,9 @@
 					>Official website</a
 				>
 			{/if}
+			<a class="btn ghost block" style="margin-top:10px" href="/help/new?schemeId={scheme.id}">
+				{t('get_help_title')}
+			</a>
 		</div>
 
 		{#if docs.length}
