@@ -19,7 +19,7 @@ export default defineConfig({
 			registerType: 'autoUpdate',
 			strategies: 'generateSW',
 			manifest: {
-				name: 'Sahayak · सहायक',
+				name: 'Sahayak',
 				short_name: 'Sahayak',
 				description: 'Discover government welfare schemes you are eligible for, by voice.',
 				start_url: '/',
