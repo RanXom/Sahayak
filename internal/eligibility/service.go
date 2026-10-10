@@ -150,15 +150,24 @@ func buildExplanation(r SchemeResult, lang string) string {
 		if lang == "hi" {
 			return "आपकी प्रोफ़ाइल के अनुसार आप इस योजना की सभी पात्रता शर्तें पूरी करते हैं।"
 		}
+		if lang == "mr" {
+			return "तुमच्या प्रोफाइलनुसार तुम्ही या योजनेच्या सर्व पात्रता अटी पूर्ण करता."
+		}
 		return "Based on your profile, you meet all the eligibility criteria for this scheme."
 	case MatchPotential:
 		if lang == "hi" {
 			return "कुछ जानकारी अभी अपूर्ण है। पात्रता की पुष्टि के लिए कृपया और जानकारी दें: " + joinFields(r.MissingFields)
 		}
+		if lang == "mr" {
+			return "अजून थोडी माहिती अपूर्ण आहे. पात्रता निश्चित करण्यासाठी कृपया आणखी माहिती द्या: " + joinFields(r.MissingFields) + "."
+		}
 		return "Some information is still needed to confirm eligibility: " + joinFields(r.MissingFields) + "."
 	default:
 		if lang == "hi" {
 			return "आपकी वर्तमान प्रोफ़ाइल इस योजना की कुछ अनिवार्य शर्तें पूरी नहीं करती।"
+		}
+		if lang == "mr" {
+			return "तुमची सध्याची प्रोफाइल या योजनेच्या काही आवश्यक अटी पूर्ण करत नाही."
 		}
 		return "Your current profile does not meet some of the mandatory criteria for this scheme."
 	}
@@ -193,6 +202,7 @@ func (s *Service) VoiceSummary(ctx context.Context, userID, lang string) (string
 // concise, natural-language summary. It never invents criteria or documents.
 func BuildVoiceSummary(res *EvaluateResponse, lang string) string {
 	hi := lang == "hi"
+	mr := lang == "mr"
 	var eligible, potential []ResultView
 	for _, r := range res.Results {
 		switch r.Status {
@@ -207,6 +217,9 @@ func BuildVoiceSummary(res *EvaluateResponse, lang string) string {
 		if hi {
 			return "आपकी दी गई जानकारी के आधार पर अभी कोई मेल खाती योजना नहीं मिली। इसका मतलब यह नहीं कि आप किसी सरकारी योजना के पात्र नहीं हैं। कृपया अपनी प्रोफ़ाइल में और जानकारी जोड़ें।"
 		}
+		if mr {
+			return "तुम्ही दिलेल्या माहितीनुसार अजून कोणतीही जुळणारी योजना सापडली नाही. याचा अर्थ असा नाही की तुम्ही कोणत्याही सरकारी योजनेसाठी पात्र नाही. कृपया तुमच्या प्रोफाइलमध्ये आणखी माहिती जोडा."
+		}
 		return "Based on what you have shared, I could not find a matching scheme yet. That does not mean you are ineligible for all government schemes. Please add more details to your profile."
 	}
 
@@ -214,6 +227,8 @@ func BuildVoiceSummary(res *EvaluateResponse, lang string) string {
 	if len(eligible) > 0 {
 		if hi {
 			b.WriteString("आपकी जानकारी के अनुसार आप इन योजनाओं के लिए पात्र हैं: ")
+		} else if mr {
+			b.WriteString("तुमच्या माहितीनुसार तुम्ही या योजनांसाठी पात्र आहात: ")
 		} else {
 			b.WriteString("Based on your information, you are eligible for ")
 		}
@@ -227,6 +242,8 @@ func BuildVoiceSummary(res *EvaluateResponse, lang string) string {
 	if len(potential) > 0 {
 		if hi {
 			b.WriteString("इन योजनाओं के लिए थोड़ी और जानकारी चाहिए: ")
+		} else if mr {
+			b.WriteString("या योजनांसाठी थोडी आणखी माहिती हवी आहे: ")
 		} else {
 			b.WriteString("For these schemes I need a little more information: ")
 		}
@@ -242,15 +259,19 @@ func BuildVoiceSummary(res *EvaluateResponse, lang string) string {
 		if names := missingDocNames(top.Documents, 4); names != "" {
 			if hi {
 				fmt.Fprintf(&b, "%s के लिए आपके पास ये दस्तावेज़ नहीं हैं: %s। ", top.Scheme.NameHI, names)
+			} else if mr {
+				fmt.Fprintf(&b, "%s साठी तुमच्याकडे ही कागदपत्रे नाहीत: %s. ", top.Scheme.NameEN, names)
 			} else {
 				fmt.Fprintf(&b, "For %s you are missing these documents: %s. ", top.Scheme.NameEN, names)
 			}
 		}
 	}
 	if len(potential) > 0 && len(potential[0].MissingFields) > 0 {
-		labels := humanFieldList(potential[0].MissingFields, hi)
+		labels := humanFieldList(potential[0].MissingFields, lang)
 		if hi {
 			fmt.Fprintf(&b, "पूरी पात्रता की पुष्टि के लिए कृपया बताएं: %s।", labels)
+		} else if mr {
+			fmt.Fprintf(&b, "तुमची पूर्ण पात्रता निश्चित करण्यासाठी कृपया सांगा: %s.", labels)
 		} else {
 			fmt.Fprintf(&b, "To confirm your full eligibility, please tell me: %s.", labels)
 		}
@@ -271,19 +292,25 @@ func (s *Service) MissingSummary(ctx context.Context, userID, lang string) (stri
 // BuildMissingSummary lists the missing facts and documents across the results.
 func BuildMissingSummary(res *EvaluateResponse, lang string) string {
 	hi := lang == "hi"
+	mr := lang == "mr"
 	facts := uniqueMissingFields(res.Results)
 	docs := uniqueMissingDocs(res.Results)
 	if len(facts) == 0 && len(docs) == 0 {
 		if hi {
 			return "फ़िलहाल मेरे पास पूरी जानकारी है। आप आवेदन शुरू कर सकते हैं।"
 		}
+		if mr {
+			return "सध्या माझ्याकडे सर्व माहिती आहे. तुम्ही अर्ज सुरू करू शकता."
+		}
 		return "For now I have everything I need. You can start an application."
 	}
 	var b strings.Builder
 	if len(facts) > 0 {
-		labels := humanFieldList(facts, hi)
+		labels := humanFieldList(facts, lang)
 		if hi {
 			fmt.Fprintf(&b, "पूरी पात्रता की पुष्टि के लिए मुझे यह जानकारी चाहिए: %s। ", labels)
+		} else if mr {
+			fmt.Fprintf(&b, "पूर्ण पात्रता निश्चित करण्यासाठी मला ही माहिती हवी आहे: %s. ", labels)
 		} else {
 			fmt.Fprintf(&b, "To confirm full eligibility I need: %s. ", labels)
 		}
@@ -433,10 +460,34 @@ var fieldLabelsHI = map[string]string{
 	"state_code":               "आपका राज्य",
 }
 
-func humanFieldList(fields []string, hi bool) string {
+var fieldLabelsMR = map[string]string{
+	"income_annual":            "तुमचे वार्षिक कौटुंबिक उत्पन्न",
+	"has_pucca_house":          "तुमच्याकडे पक्के घर आहे का",
+	"caste_category":           "तुमचा सामाजिक प्रवर्ग",
+	"land_acres":               "तुमच्याकडे किती जमीन आहे",
+	"ration_card_type":         "तुमच्या रेशन कार्डचा प्रकार",
+	"has_bank_account":         "तुमचे बँक खाते आहे का",
+	"has_aadhaar":              "तुमच्याकडे आधार कार्ड आहे का",
+	"residence_type":           "तुम्ही ग्रामीण की शहरी भागात राहता",
+	"occupation":               "तुम्ही काय काम करता",
+	"education_level":          "तुमची शैक्षणिक पात्रता",
+	"disability_status":        "तुमची दिव्यांग स्थिती",
+	"minority_status":          "तुम्ही अल्पसंख्याक समाजातील आहात का",
+	"has_electricity":          "तुमच्या घरात वीज जोडणी आहे का",
+	"employment_status":        "तुमची रोजगार स्थिती",
+	"family_members":           "तुमचे कुटुंबीय",
+	"is_pregnant_or_lactating": "तुम्ही गर्भवती किंवा स्तनदा माता आहात का",
+	"has_girl_child":           "तुम्हाला मुलगी आहे का",
+	"girl_child_age":           "तुमच्या मुलीचे वय",
+	"state_code":               "तुमचे राज्य",
+}
+
+func humanFieldList(fields []string, lang string) string {
 	m := fieldLabelsEN
-	if hi {
+	if lang == "hi" {
 		m = fieldLabelsHI
+	} else if lang == "mr" {
+		m = fieldLabelsMR
 	}
 	out := make([]string, 0, len(fields))
 	for _, f := range fields {

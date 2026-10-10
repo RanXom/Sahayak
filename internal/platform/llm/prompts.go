@@ -73,31 +73,37 @@ func BuildExtractionUserPrompt(req ExtractFactsRequest) string {
 // QuestionForField returns a deterministic, localized question for a fact key.
 // It is used both as the LLM prompt hint and as a fallback when the LLM is down.
 func QuestionForField(field, lang string) string {
-	type q struct{ en, hi string }
+	type q struct{ en, hi, mr string }
 	questions := map[string]q{
-		"state":             {"Which state do you live in?", "आप किस राज्य में रहते हैं?"},
-		"gender":            {"Please tell me whether you are male or female.", "कृपया बताएं कि आप पुरुष या नारी हैं।"},
-		"age":               {"How old are you?", "आपकी उम्र कितनी है?"},
-		"marital_status":    {"What is your marital status?", "आपकी वैवाहिक स्थिति क्या है?"},
-		"income_annual":     {"What is your annual family income?", "आपकी वार्षिक पारिवारिक आय कितनी है?"},
-		"occupation":        {"What is your occupation?", "आपका व्यवसाय क्या है?"},
-		"caste_category":    {"Which social category do you belong to (General, OBC, SC, ST)?", "आप किस सामाजिक वर्ग से हैं (सामान्य, ओबीसी, अनुसूचित जाति, अनुसूचित जनजाति)?"},
-		"residence_type":    {"Do you live in a rural or urban area?", "आप ग्रामीण या शहरी क्षेत्र में रहते हैं?"},
-		"ration_card_type":  {"What type of ration card does your household have?", "आपके परिवार के पास किस प्रकार का राशन कार्ड है?"},
-		"land_acres":        {"How much agricultural land does your family own (in acres)?", "आपके परिवार के पास कितनी कृषि भूमि है (एकड़ में)?"},
-		"has_bank_account":  {"Do you have a bank account?", "क्या आपका बैंक खाता है?"},
-		"has_aadhaar":       {"Do you have an Aadhaar card?", "क्या आपके पास आधार कार्ड है?"},
-		"education_level":   {"What is your education level?", "आपकी शिक्षा का स्तर क्या है?"},
-		"family_members":    {"Tell me about your family members and their ages.", "अपने परिवार के सदस्यों और उनकी उम्र के बारे में बताइए।"},
-		"has_pucca_house":   {"Does your family own a pucca (permanent) house?", "क्या आपके परिवार के पास पक्का घर है?"},
-		"has_electricity":   {"Does your household have an electricity connection?", "क्या आपके घर में बिजली कनेक्शन है?"},
-		"employment_status": {"Are you currently employed, unemployed, or a student?", "आप वर्तमान में कार्यरत, बेरोजगार या विद्यार्थी हैं?"},
+		"state":             {"Which state do you live in?", "आप किस राज्य में रहते हैं?", "तुम्ही कोणत्या राज्यात राहता?"},
+		"gender":            {"Please tell me whether you are male or female.", "कृपया बताएं कि आप पुरुष या नारी हैं।", "कृपया सांगा, तुम्ही पुरुष आहात की स्त्री आहात."},
+		"age":               {"How old are you?", "आपकी उम्र कितनी है?", "तुमचे वय किती आहे?"},
+		"marital_status":    {"What is your marital status?", "आपकी वैवाहिक स्थिति क्या है?", "तुमची वैवाहिक स्थिती काय आहे?"},
+		"income_annual":     {"What is your annual family income?", "आपकी वार्षिक पारिवारिक आय कितनी है?", "तुमचे वार्षिक कौटुंबिक उत्पन्न किती आहे?"},
+		"occupation":        {"What is your occupation?", "आपका व्यवसाय क्या है?", "तुमचा व्यवसाय काय आहे?"},
+		"caste_category":    {"Which social category do you belong to (General, OBC, SC, ST)?", "आप किस सामाजिक वर्ग से हैं (सामान्य, ओबीसी, अनुसूचित जाति, अनुसूचित जनजाति)?", "तुम्ही कोणत्या सामाजिक प्रवर्गातील आहात (सर्वसाधारण, ओबीसी, अनुसूचित जाती, अनुसूचित जमाती)?"},
+		"residence_type":    {"Do you live in a rural or urban area?", "आप ग्रामीण या शहरी क्षेत्र में रहते हैं?", "तुम्ही ग्रामीण की शहरी भागात राहता?"},
+		"ration_card_type":  {"What type of ration card does your household have?", "आपके परिवार के पास किस प्रकार का राशन कार्ड है?", "तुमच्या कुटुंबाकडे कोणत्या प्रकारचे रेशन कार्ड आहे?"},
+		"land_acres":        {"How much agricultural land does your family own (in acres)?", "आपके परिवार के पास कितनी कृषि भूमि है (एकड़ में)?", "तुमच्या कुटुंबाकडे किती शेतजमीन आहे (एकरमध्ये)?"},
+		"has_bank_account":  {"Do you have a bank account?", "क्या आपका बैंक खाता है?", "तुमचे बँक खाते आहे का?"},
+		"has_aadhaar":       {"Do you have an Aadhaar card?", "क्या आपके पास आधार कार्ड है?", "तुमच्याकडे आधार कार्ड आहे का?"},
+		"education_level":   {"What is your education level?", "आपकी शिक्षा का स्तर क्या है?", "तुमची शैक्षणिक पात्रता काय आहे?"},
+		"family_members":    {"Tell me about your family members and their ages.", "अपने परिवार के सदस्यों और उनकी उम्र के बारे में बताइए।", "तुमच्या कुटुंबातील सदस्यांबद्दल आणि त्यांच्या वयाबद्दल सांगा."},
+		"has_pucca_house":   {"Does your family own a pucca (permanent) house?", "क्या आपके परिवार के पास पक्का घर है?", "तुमच्या कुटुंबाकडे पक्के (कायमस्वरूपी) घर आहे का?"},
+		"has_electricity":   {"Does your household have an electricity connection?", "क्या आपके घर में बिजली कनेक्शन है?", "तुमच्या घरात वीज जोडणी आहे का?"},
+		"employment_status": {"Are you currently employed, unemployed, or a student?", "आप वर्तमान में कार्यरत, बेरोजगार या विद्यार्थी हैं?", "तुम्ही सध्या नोकरदार, बेरोजगार की विद्यार्थी आहात?"},
 	}
 	if lang == "hi" {
 		if v, ok := questions[field]; ok {
 			return v.hi
 		}
 		return "कृपया इसके बारे में अधिक जानकारी दें: " + field
+	}
+	if lang == "mr" {
+		if v, ok := questions[field]; ok {
+			return v.mr
+		}
+		return "कृपया याबद्दल अधिक माहिती द्या: " + field
 	}
 	if v, ok := questions[field]; ok {
 		return v.en
@@ -169,6 +175,16 @@ func FallbackExplanation(req ExplanationRequest) string {
 			return "कुछ जानकारी अभी अपूर्ण है। पात्रता की पुष्टि के लिए कृपया और जानकारी दें।"
 		default:
 			return "आपकी वर्तमान प्रोफ़ाइल इस योजना की कुछ अनिवार्य शर्तें पूरी नहीं करती।"
+		}
+	}
+	if req.Language == "mr" {
+		switch req.Status {
+		case "eligible":
+			return "तुमच्या प्रोफाइलनुसार तुम्ही या योजनेच्या सर्व पात्रता अटी पूर्ण करता."
+		case "potentially_eligible":
+			return "अजून थोडी माहिती अपूर्ण आहे. पात्रता निश्चित करण्यासाठी कृपया आणखी माहिती द्या."
+		default:
+			return "तुमची सध्याची प्रोफाइल या योजनेच्या काही आवश्यक अटी पूर्ण करत नाही."
 		}
 	}
 	switch req.Status {

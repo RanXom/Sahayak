@@ -194,6 +194,19 @@ func (s *Service) process(ctx context.Context, userID string, conv *Conversation
 	// reply language matches what they actually used. Otherwise fall back to the
 	// provided (UI) language, detecting only when it is unknown.
 	lang = resolveReplyLang(text, lang)
+	// Latin script carries no language signal (English vs Romanized Hindi /
+	// Marathi / Tamil look identical), so detect concurrently with extraction
+	// below — no added latency. Only non-Hindi results override: "hi" is also
+	// the chain's last-resort fallback, so trusting it would flip English to
+	// Hindi whenever the LLM is down.
+	var detectCh chan detectResult
+	if detectScriptLang(text) == "" {
+		detectCh = make(chan detectResult, 1)
+		go func() {
+			code, err := s.llm.DetectLanguage(ctx, text)
+			detectCh <- detectResult{code: code, err: err}
+		}()
+	}
 	if lang == "" {
 		if detected, err := s.llm.DetectLanguage(ctx, text); err == nil && detected != "" {
 			lang = detected
@@ -226,6 +239,14 @@ func (s *Service) process(ctx context.Context, userID string, conv *Conversation
 		extraction = &llm.ExtractFactsResponse{Facts: map[string]any{}}
 	} else {
 		s.logger.Debug("llm_extract_ok", "language", lang, "facts", len(extraction.Facts), "duration_ms", time.Since(extractStart).Milliseconds())
+	}
+	// Pick up the concurrent language detection (started above for
+	// Latin-script input, overlapping extraction so it costs no latency).
+	if detectCh != nil {
+		if res := <-detectCh; res.err == nil && supportedReplyLang(res.code) && res.code != "hi" {
+			s.logger.Info("llm_detect_override", "from", lang, "to", res.code)
+			lang = res.code
+		}
 	}
 	facts := profile.SanitizeExtractedFacts(extraction.Facts)
 
@@ -359,12 +380,18 @@ func greetingText(lang string) string {
 	if lang == "hi" {
 		return "नमस्ते! मैं सहायक हूँ। मुझे अपने बारे में बताइए, जैसे आपकी उम्र, आप कहाँ रहते हैं, और आप क्या काम करते हैं।"
 	}
+	if lang == "mr" {
+		return "नमस्ते! मी सहायक आहे. मला तुमच्याबद्दल सांगा — उदाहरणार्थ तुमचे वय, तुम्ही कुठे राहता आणि तुम्ही काय काम करता."
+	}
 	return "Namaste! I am Sahayak. Tell me about yourself — for example your age, where you live, and what work you do."
 }
 
 func readyText(lang string) string {
 	if lang == "hi" {
 		return "धन्यवाद! आपकी प्रोफ़ाइल तैयार है। अब आप अपनी जानकारी की समीक्षा करें और पात्र योजनाएँ देखें।"
+	}
+	if lang == "mr" {
+		return "धन्यवाद! तुमची प्रोफाइल तयार आहे. कृपया तुमची माहिती तपासा आणि तुम्ही पात्र असलेल्या योजना पाहा."
 	}
 	return "Thank you! Your profile is ready. Please review your details and see the schemes you may be eligible for."
 }
@@ -430,6 +457,21 @@ func (s *Service) missingSummary(ctx context.Context, userID, lang string) strin
 		return ""
 	}
 	return strings.TrimSpace(txt)
+}
+
+// detectResult carries an async language-detection outcome.
+type detectResult struct {
+	code string
+	err  error
+}
+
+// supportedReplyLang reports whether code is a language we can actually reply
+// and speak in (script coverage + TTS + prompts).
+func supportedReplyLang(code string) bool {
+	if code == "en" {
+		return true
+	}
+	return scriptOf(code) != ""
 }
 
 // resolveReplyLang picks the reply language for a turn. A non-empty lang that
