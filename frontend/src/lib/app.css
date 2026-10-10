@@ -435,18 +435,7 @@ canvas {
 	letter-spacing: -0.02em;
 }
 .brand .mark {
-	width: 22px;
-	height: 22px;
-	border-radius: 7px;
-	background: var(--accent);
-	position: relative;
-}
-.brand .mark::after {
-	content: '';
-	position: absolute;
-	inset: 6px;
-	border-radius: 50%;
-	background: color-mix(in srgb, var(--accent) 40%, #fff);
+	flex: none;
 }
 .navlinks {
 	display: none;
