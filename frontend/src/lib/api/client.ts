@@ -146,6 +146,103 @@ export interface User {
 	phone_last4: string;
 }
 
+export interface HelperProfile {
+	id: string;
+	user_id: string;
+	helper_type: string;
+	organization?: string;
+	display_name?: string;
+	languages: string[];
+	categories: string[];
+	experience?: string;
+	is_available: boolean;
+	terms_accepted_at?: string | null;
+	verified: boolean;
+	active: boolean;
+}
+
+export interface HelperRegisterInput {
+	helper_type: string;
+	organization?: string;
+	id_number?: string;
+	display_name?: string;
+	languages: string[];
+	categories: string[];
+	experience?: string;
+	terms_accepted: boolean;
+}
+
+export interface AssistRequest {
+	id: string;
+	citizen_user_id?: string;
+	application_id?: string | null;
+	scheme_id?: string | null;
+	language: string;
+	category: string;
+	details?: string;
+	share_profile_facts: boolean;
+	share_documents: boolean;
+	status: string;
+	matched_helper_user_id?: string | null;
+	created_at: string;
+	waiting_seconds?: number;
+	helper_display_name?: string | null;
+}
+
+export interface AssistRequestInput {
+	application_id?: string;
+	scheme_id?: string;
+	language: string;
+	category: string;
+	details?: string;
+	share_profile_facts: boolean;
+	share_documents: boolean;
+}
+
+export interface AssistSession {
+	id: string;
+	request_id?: string | null;
+	helper_user_id: string;
+	citizen_user_id?: string | null;
+	status: string;
+	created_at: string;
+	completed_at?: string | null;
+}
+
+export interface AssistMessage {
+	id: string;
+	session_id: string;
+	sender_role: string;
+	body: string;
+	created_at: string;
+	mine?: boolean;
+}
+
+export interface AssistSignal {
+	id: string;
+	session_id: string;
+	kind: string;
+	payload: Record<string, unknown>;
+	created_at: string;
+	mine?: boolean;
+}
+
+export interface DraftValue {
+	field_name: string;
+	value: unknown;
+	proposed_by: string;
+	status: string;
+	updated_at: string;
+}
+
+export interface AssistContext {
+	request: AssistRequest;
+	drafts: DraftValue[];
+	profile_facts?: Record<string, unknown>;
+	documents?: Array<{ document_type: string; has_document: boolean }>;
+	application?: { id: string; scheme_id: string; status: string; form_data: Record<string, unknown> };
+}
+
 export interface AppConfig {
 	app_name: string;
 	version: string;
@@ -299,16 +396,24 @@ export const api = {
 				body: JSON.stringify({ phone })
 			}
 		),
-	verifyOtp: (challenge_id: string, otp: string) =>
+	verifyOtp: (challenge_id: string, otp: string, role?: string) =>
 		request<{ access_token: string; refresh_token: string; expires_in: number; user: User }>(
 			'/auth/otp/verify',
-			{ method: 'POST', body: JSON.stringify({ challenge_id, otp }) }
+			{ method: 'POST', body: JSON.stringify({ challenge_id, otp, role }) }
 		),
-	firebaseLogin: (id_token: string) =>
+	firebaseLogin: (id_token: string, role?: string) =>
 		request<{ access_token: string; refresh_token: string; expires_in: number; user: User }>(
 			'/auth/firebase',
-			{ method: 'POST', body: JSON.stringify({ id_token }) }
+			{ method: 'POST', body: JSON.stringify({ id_token, role }) }
 		),
+	refreshSession: () => {
+		const rt =
+			typeof localStorage !== 'undefined' ? localStorage.getItem('sahayak_refresh') : null;
+		return request<{ access_token: string; refresh_token: string; expires_in: number; user: User }>(
+			'/auth/refresh',
+			{ method: 'POST', body: JSON.stringify({ refresh_token: rt }) }
+		);
+	},
 	me: () => request<User>('/auth/me'),
 	logout: () =>
 		request<{ status: string }>('/auth/logout', { method: 'POST', body: JSON.stringify({}) }),
@@ -409,7 +514,89 @@ export const api = {
 			'/notifications/preferences',
 			{ method: 'PUT', body: JSON.stringify({ channel, enabled }) }
 		),
-	listNotifications: () => request<{ notifications: unknown[] }>('/notifications')
+	listNotifications: () => request<{ notifications: unknown[] }>('/notifications'),
+
+	// Helper profile
+	getHelperProfile: () => request<HelperProfile>('/helper/profile'),
+	registerHelper: (input: HelperRegisterInput) =>
+		request<HelperProfile>('/helper/register', {
+			method: 'POST',
+			body: JSON.stringify(input)
+		}),
+	updateHelperProfile: (input: HelperRegisterInput) =>
+		request<HelperProfile>('/helper/profile', {
+			method: 'PUT',
+			body: JSON.stringify(input)
+		}),
+	setAvailability: (is_available: boolean) =>
+		request<{ is_available: boolean }>('/helper/availability', {
+			method: 'PUT',
+			body: JSON.stringify({ is_available })
+		}),
+
+	// Assistance marketplace
+	createAssistRequest: (input: AssistRequestInput) =>
+		request<AssistRequest>('/assistance/requests', {
+			method: 'POST',
+			body: JSON.stringify(input)
+		}),
+	myAssistRequests: () => request<{ requests: AssistRequest[] }>('/assistance/requests'),
+	getAssistRequest: (id: string) => request<AssistRequest>(`/assistance/requests/${id}`),
+	joinAssistRequest: (id: string, scope: { share_profile_facts: boolean; share_documents: boolean }) =>
+		request<AssistSession>(`/assistance/requests/${id}/join`, {
+			method: 'POST',
+			body: JSON.stringify(scope)
+		}),
+	cancelAssistRequest: (id: string) =>
+		request<AssistRequest>(`/assistance/requests/${id}/cancel`, { method: 'POST', body: JSON.stringify({}) }),
+	assistQueue: () =>
+		request<{ requests: AssistRequest[]; has_active_session: boolean }>('/assistance/queue'),
+	acceptAssistRequest: (id: string) =>
+		request<AssistSession>(`/assistance/requests/${id}/accept`, {
+			method: 'POST',
+			body: JSON.stringify({})
+		}),
+	myAssistSessions: () => request<{ sessions: AssistSession[] }>('/assistance/sessions'),
+	getAssistSession: (id: string) => request<AssistSession>(`/assistance/sessions/${id}`),
+	assistContext: (id: string) => request<AssistContext>(`/assistance/sessions/${id}/context`),
+	endAssistSession: (id: string) =>
+		request<AssistSession>(`/assistance/sessions/${id}/end`, {
+			method: 'POST',
+			body: JSON.stringify({})
+		}),
+	sendAssistMessage: (id: string, body: string, client_msg_id: string) =>
+		request<AssistMessage>(`/assistance/sessions/${id}/messages`, {
+			method: 'POST',
+			body: JSON.stringify({ body, client_msg_id })
+		}),
+	listAssistMessages: (id: string, since?: string) =>
+		request<{ messages: AssistMessage[] }>(
+			`/assistance/sessions/${id}/messages${since ? `?since=${encodeURIComponent(since)}` : ''}`
+		),
+	sendAssistSignal: (id: string, kind: string, payload: Record<string, unknown>) =>
+		request<AssistSignal>(`/assistance/sessions/${id}/signals`, {
+			method: 'POST',
+			body: JSON.stringify({ kind, payload })
+		}),
+	listAssistSignals: (id: string, since?: string) =>
+		request<{ signals: AssistSignal[] }>(
+			`/assistance/sessions/${id}/signals${since ? `?since=${encodeURIComponent(since)}` : ''}`
+		),
+	proposeDraftValue: (id: string, field_name: string, value: unknown) =>
+		request<DraftValue>(`/assistance/sessions/${id}/drafts`, {
+			method: 'PUT',
+			body: JSON.stringify({ field_name, value })
+		}),
+	confirmDraftValue: (id: string, field_name: string) =>
+		request<DraftValue>(`/assistance/sessions/${id}/drafts/confirm`, {
+			method: 'POST',
+			body: JSON.stringify({ field_name })
+		}),
+	applyDraftValues: (id: string) =>
+		request<{ applied: Record<string, unknown> }>(`/assistance/sessions/${id}/drafts/apply`, {
+			method: 'POST',
+			body: JSON.stringify({})
+		})
 };
 
 export function apiBase(): string {

@@ -94,6 +94,14 @@
 			<span class="go"><Icon name="arrow" size={18} /></span>
 		</a>
 
+		<a class="help-hero panel soft" href="/help/new">
+			<div class="talk-copy">
+				<span class="talk-title">{t('get_help_title')}</span>
+				<span class="muted">{t('get_help_sub')}</span>
+			</div>
+			<span class="go"><Icon name="arrow" size={18} /></span>
+		</a>
+
 		<div class="stats">
 			<a class="stat" href="/profile">
 				<Ring value={completeness} size={62} label={t('profile_completeness')} />
@@ -161,6 +169,16 @@
 <style>
 	.greet h1 {
 		max-width: 22ch;
+	}
+	.help-hero {
+		display: flex;
+		align-items: center;
+		gap: 18px;
+		padding: 18px 22px;
+		margin-top: 14px;
+	}
+	.help-hero .talk-title {
+		font-size: var(--step-1);
 	}
 	.talk-hero {
 		display: flex;

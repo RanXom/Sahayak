@@ -144,7 +144,7 @@ func (s *Service) RequestOTP(ctx context.Context, rawPhone, ip, ua string) (*Req
 }
 
 // VerifyOTP validates an OTP and returns tokens, creating the user if new.
-func (s *Service) VerifyOTP(ctx context.Context, challengeID, otp, ip, ua string) (*AuthResult, error) {
+func (s *Service) VerifyOTP(ctx context.Context, challengeID, otp, ip, ua, roleIntent string) (*AuthResult, error) {
 	challenge, err := s.repo.GetOTPChallenge(ctx, challengeID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -178,7 +178,7 @@ func (s *Service) VerifyOTP(ctx context.Context, challengeID, otp, ip, ua string
 		return nil, domain.Internal("Could not complete verification", err)
 	}
 
-	user, err := s.findOrCreateUser(ctx, challenge.PhoneHash, challenge.PhoneLast4, challenge.PhoneEncrypted)
+	user, err := s.findOrCreateUser(ctx, challenge.PhoneHash, challenge.PhoneLast4, challenge.PhoneEncrypted, roleIntent)
 	if err != nil {
 		return nil, err
 	}
@@ -186,15 +186,21 @@ func (s *Service) VerifyOTP(ctx context.Context, challengeID, otp, ip, ua string
 	return s.finishLogin(ctx, user, "auth.login", ip, ua)
 }
 
-// findOrCreateUser returns the user for the phone hash, creating a citizen
-// account on first login.
-func (s *Service) findOrCreateUser(ctx context.Context, phoneHash, phoneLast4, phoneEncrypted string) (*domain.User, error) {
+// findOrCreateUser returns the user for the phone hash, creating an account
+// on first login. roleIntent ("helper") applies ONLY to brand-new accounts:
+// existing accounts keep their stored role, so a role can never be escalated
+// by editing a login request.
+func (s *Service) findOrCreateUser(ctx context.Context, phoneHash, phoneLast4, phoneEncrypted, roleIntent string) (*domain.User, error) {
 	user, err := s.repo.FindUserByPhoneHash(ctx, phoneHash)
 	if err != nil {
 		if !errors.Is(err, ErrNotFound) {
 			return nil, domain.Internal("Could not look up user", err)
 		}
-		user, err = s.repo.CreateUser(ctx, phoneHash, phoneLast4, phoneEncrypted, "hi", domain.RoleCitizen)
+		role := domain.RoleCitizen
+		if roleIntent == domain.RoleHelper {
+			role = domain.RoleHelper
+		}
+		user, err = s.repo.CreateUser(ctx, phoneHash, phoneLast4, phoneEncrypted, "hi", role)
 		if err != nil {
 			return nil, domain.Internal("Could not create user", err)
 		}
@@ -227,7 +233,7 @@ func (s *Service) finishLogin(ctx context.Context, user *domain.User, action, ip
 // LoginWithFirebase exchanges a verified Firebase ID token for our own session
 // tokens. The phone number comes from the verified phone_number claim, so no
 // SMS is sent by us — Firebase delivered the OTP.
-func (s *Service) LoginWithFirebase(ctx context.Context, idToken, ip, ua string) (*AuthResult, error) {
+func (s *Service) LoginWithFirebase(ctx context.Context, idToken, ip, ua, roleIntent string) (*AuthResult, error) {
 	if s.firebase == nil {
 		return nil, domain.Unavailable("Firebase login is not configured")
 	}
@@ -247,7 +253,7 @@ func (s *Service) LoginWithFirebase(ctx context.Context, idToken, ip, ua string)
 			encPhone = enc
 		}
 	}
-	user, err := s.findOrCreateUser(ctx, phoneHash, Last4(normalized), encPhone)
+	user, err := s.findOrCreateUser(ctx, phoneHash, Last4(normalized), encPhone, roleIntent)
 	if err != nil {
 		return nil, err
 	}

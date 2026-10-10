@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/sahayak/sahayak/internal/application"
+	"github.com/sahayak/sahayak/internal/assistance"
 	"github.com/sahayak/sahayak/internal/audit"
 	"github.com/sahayak/sahayak/internal/auth"
 	"github.com/sahayak/sahayak/internal/config"
@@ -62,6 +63,8 @@ type Server struct {
 	notificationSvc     *notification.Service
 	helperHandler       *helper.Handler
 	helperSvc           *helper.Service
+	assistHandler       *assistance.Handler
+	assistSvc           *assistance.Service
 	maintenance         *maintenance.Service
 	jobsClient          *jobs.Client
 	audioStore          *conversation.FileAudioStore
@@ -214,8 +217,14 @@ func (s *Server) initModules() {
 	})
 
 	helperRepo := helper.NewRepository(s.pool)
-	s.helperSvc = helper.NewService(helperRepo, auditLogger, s.cfg.RateLimit.HelperSessionsPerDay)
+	s.helperSvc = helper.NewService(helperRepo, authRepo, auditLogger, s.cfg.RateLimit.HelperSessionsPerDay)
 	s.helperHandler = helper.NewHandler(s.helperSvc)
+
+	assistRepo := assistance.NewRepository(s.pool)
+	s.assistSvc = assistance.NewService(assistance.Deps{
+		Repo: assistRepo, Apps: appRepo, Profiles: profileRepo, Schemes: schemeRepo, Audit: auditLogger,
+	})
+	s.assistHandler = assistance.NewHandler(s.assistSvc)
 
 	s.maintenance = maintenance.New(s.pool, schemeRepo, s.logger, s.cfg.DataDir+"/audio", s.cfg.PDFDir)
 }
@@ -334,6 +343,37 @@ func (s *Server) buildRouter() {
 			r.Put("/notifications/preferences", s.notificationHandler.UpdatePreferences)
 
 			r.Post("/helper/register", s.helperHandler.Register)
+
+			r.Post("/assistance/requests", s.assistHandler.CreateRequest)
+			r.Get("/assistance/requests", s.assistHandler.MyRequests)
+			r.Get("/assistance/requests/{id}", s.assistHandler.GetRequest)
+			r.Post("/assistance/requests/{id}/join", s.assistHandler.Join)
+			r.Post("/assistance/requests/{id}/cancel", s.assistHandler.Cancel)
+			r.Get("/assistance/sessions", s.assistHandler.MySessions)
+			r.Get("/assistance/sessions/{id}", s.assistHandler.GetSession)
+			r.Get("/assistance/sessions/{id}/context", s.assistHandler.SharedContext)
+			r.Post("/assistance/sessions/{id}/end", s.assistHandler.EndSession)
+			r.Post("/assistance/sessions/{id}/messages", s.assistHandler.SendMessage)
+			r.Get("/assistance/sessions/{id}/messages", s.assistHandler.ListMessages)
+			r.Post("/assistance/sessions/{id}/signals", s.assistHandler.SendSignal)
+			r.Get("/assistance/sessions/{id}/signals", s.assistHandler.ListSignals)
+			r.Put("/assistance/sessions/{id}/drafts", s.assistHandler.ProposeDraft)
+			r.Post("/assistance/sessions/{id}/drafts/confirm", s.assistHandler.ConfirmDraft)
+			r.Post("/assistance/sessions/{id}/drafts/apply", s.assistHandler.ApplyDrafts)
+		})
+
+		// Marketplace routes (helpers by role; verification is a trust badge,
+		// not a gate, so new helpers can reach the queue immediately).
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.Authenticate(s.tokens))
+			r.Use(middleware.RequireRole(domain.RoleHelper, domain.RoleAdmin))
+			r.Use(middleware.Limit(s.userLimiter, middleware.UserKey))
+
+			r.Get("/helper/profile", s.helperHandler.Profile)
+			r.Put("/helper/profile", s.helperHandler.UpdateProfile)
+			r.Put("/helper/availability", s.helperHandler.SetAvailability)
+			r.Get("/assistance/queue", s.assistHandler.Queue)
+			r.Post("/assistance/requests/{id}/accept", s.assistHandler.Accept)
 		})
 
 		// Helper routes (verified helpers and admins)

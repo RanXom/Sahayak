@@ -417,3 +417,139 @@ Accept-Language: en
 # @auth bearer {{auth.token}}
 GET {{base.url}}/api/v1/admin/helpers
 Accept-Language: en
+
+### Register helper (promotes citizen -> helper, then refresh tokens)
+# @name RegisterHelper
+# @assert response.statusCode == 200
+POST {{base.url}}/api/v1/helper/register
+Content-Type: application/json
+Authorization: Bearer {{auth.token}}
+
+{"helper_type":"volunteer","display_name":"Rest Helper","languages":["hi","mr"],"categories":["application_help"],"experience":"CSC","terms_accepted":true}
+
+### Helper profile
+# @name HelperProfile
+# @auth bearer {{auth.token}}
+GET {{base.url}}/api/v1/helper/profile
+Accept-Language: en
+
+### Set availability
+# @name HelperAvailability
+# @auth bearer {{auth.token}}
+PUT {{base.url}}/api/v1/helper/availability
+Content-Type: application/json
+
+{"is_available":true}
+
+### Create assistance request (citizen)
+# @name CreateAssistRequest
+# @auth bearer {{auth.token}}
+# @capture file assist.request_id = response.json.id
+POST {{base.url}}/api/v1/assistance/requests
+Content-Type: application/json
+Accept-Language: en
+
+{"language":"mr","category":"application_help","details":"PM-KISAN form","share_profile_facts":true,"share_documents":false}
+
+### My assistance requests
+# @name MyAssistRequests
+# @auth bearer {{auth.token}}
+GET {{base.url}}/api/v1/assistance/requests
+Accept-Language: en
+
+### Helper queue (ranked)
+# @name AssistQueue
+# @auth bearer {{auth.token}}
+GET {{base.url}}/api/v1/assistance/queue
+Accept-Language: en
+
+### Accept request (atomic; second accepter gets a conflict)
+# @name AcceptAssistRequest
+# @auth bearer {{auth.token}}
+# @capture file assist.session_id = response.json.id
+POST {{base.url}}/api/v1/assistance/requests/{{assist.request_id}}/accept
+Content-Type: application/json
+
+{}
+
+### Join request (citizen confirms + grants consent)
+# @name JoinAssistRequest
+# @auth bearer {{auth.token}}
+POST {{base.url}}/api/v1/assistance/requests/{{assist.request_id}}/join
+Content-Type: application/json
+
+{"share_profile_facts":true,"share_documents":false}
+
+### Session context (consent-scoped)
+# @name AssistContext
+# @auth bearer {{auth.token}}
+GET {{base.url}}/api/v1/assistance/sessions/{{assist.session_id}}/context
+Accept-Language: en
+
+### Send chat message (idempotent via client_msg_id)
+# @name AssistMessage
+# @auth bearer {{auth.token}}
+POST {{base.url}}/api/v1/assistance/sessions/{{assist.session_id}}/messages
+Content-Type: application/json
+
+{"body":"Namaste, I need help","client_msg_id":"rest-1"}
+
+### Poll chat
+# @name AssistMessagesPoll
+# @auth bearer {{auth.token}}
+GET {{base.url}}/api/v1/assistance/sessions/{{assist.session_id}}/messages
+Accept-Language: en
+
+### Send WebRTC signal (offer/answer/ice/hangup/join/leave)
+# @name AssistSignal
+# @auth bearer {{auth.token}}
+POST {{base.url}}/api/v1/assistance/sessions/{{assist.session_id}}/signals
+Content-Type: application/json
+
+{"kind":"join","payload":{}}
+
+### Poll signals
+# @name AssistSignalsPoll
+# @auth bearer {{auth.token}}
+GET {{base.url}}/api/v1/assistance/sessions/{{assist.session_id}}/signals
+Accept-Language: en
+
+### Propose draft value (helper) / set directly (citizen)
+# @name AssistDraftPropose
+# @auth bearer {{auth.token}}
+PUT {{base.url}}/api/v1/assistance/sessions/{{assist.session_id}}/drafts
+Content-Type: application/json
+
+{"field_name":"full_name","value":"Rest Citizen"}
+
+### Confirm draft value (citizen)
+# @name AssistDraftConfirm
+# @auth bearer {{auth.token}}
+POST {{base.url}}/api/v1/assistance/sessions/{{assist.session_id}}/drafts/confirm
+Content-Type: application/json
+
+{"field_name":"full_name"}
+
+### Apply confirmed drafts to application (citizen)
+# @name AssistDraftApply
+# @auth bearer {{auth.token}}
+POST {{base.url}}/api/v1/assistance/sessions/{{assist.session_id}}/drafts/apply
+Content-Type: application/json
+
+{}
+
+### End session (revokes helper access)
+# @name AssistSessionEnd
+# @auth bearer {{auth.token}}
+POST {{base.url}}/api/v1/assistance/sessions/{{assist.session_id}}/end
+Content-Type: application/json
+
+{}
+
+### Cancel request (citizen)
+# @name AssistRequestCancel
+# @auth bearer {{auth.token}}
+POST {{base.url}}/api/v1/assistance/requests/{{assist.request_id}}/cancel
+Content-Type: application/json
+
+{}

@@ -90,6 +90,16 @@ func (r *Repository) UpdatePreferredLang(ctx context.Context, userID, lang strin
 	return err
 }
 
+// PromoteToHelper moves a citizen account to the helper role. Admins are
+// never touched. Returns true when the role actually changed.
+func (r *Repository) PromoteToHelper(ctx context.Context, userID string) (bool, error) {
+	tag, err := r.pool.Exec(ctx, `UPDATE users SET role = 'helper', updated_at = NOW() WHERE id = $1 AND role = 'citizen'`, userID)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
 // CreateOTPChallenge stores a new OTP challenge.
 func (r *Repository) CreateOTPChallenge(ctx context.Context, phoneHash, phoneLast4, phoneEncrypted, otpHash, purpose string, expiresAt time.Time) (string, error) {
 	var id string

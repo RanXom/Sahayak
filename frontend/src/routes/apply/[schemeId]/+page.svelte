@@ -131,6 +131,12 @@
 		{/if}
 
 		<div class="actions">
+			<a
+				class="btn ghost block"
+				href="/help/new?applicationId={view.application.id}&schemeId={view.scheme.id}"
+			>
+				{t('get_help_title')}
+			</a>
 			<button class="btn ghost block" onclick={copyDetails}>Copy details for the online form</button>
 			<button class="btn ghost block" onclick={save} disabled={busy}>{t('save_changes')}</button>
 			<button class="btn block" onclick={download} disabled={busy}>
