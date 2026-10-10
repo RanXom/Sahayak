@@ -22,6 +22,21 @@
 
 	let localVideo = $state<HTMLVideoElement | null>(null);
 	let remoteVideo = $state<HTMLVideoElement | null>(null);
+	let remoteStream = $state<MediaStream | null>(null);
+
+	// Streams must (re)attach whenever the video elements mount: the answerer
+	// acquires media while the call UI is still hidden, so a one-shot
+	// assignment in ensureMedia/ontrack lands on null and is lost forever.
+	$effect(() => {
+		if (localVideo && localStream && localVideo.srcObject !== localStream) {
+			localVideo.srcObject = localStream;
+		}
+	});
+	$effect(() => {
+		if (remoteVideo && remoteStream && remoteVideo.srcObject !== remoteStream) {
+			remoteVideo.srcObject = remoteStream;
+		}
+	});
 	let pc: RTCPeerConnection | null = null;
 	let localStream: MediaStream | null = null;
 	let remoteOffer: AssistSignal | null = null;
@@ -46,7 +61,7 @@
 			}
 		};
 		pc.ontrack = (e) => {
-			if (remoteVideo && e.streams[0]) remoteVideo.srcObject = e.streams[0];
+			if (e.streams[0]) remoteStream = e.streams[0];
 		};
 		pc.onconnectionstatechange = () => {
 			if (!pc) return;
@@ -196,6 +211,7 @@
 		pc = null;
 		localStream?.getTracks().forEach((tr) => tr.stop());
 		localStream = null;
+		remoteStream = null;
 		if (remoteVideo) remoteVideo.srcObject = null;
 	}
 
